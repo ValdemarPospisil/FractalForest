@@ -2,6 +2,9 @@
 Implementace L-systémů pro generování stromů
 """
 import random
+import logging
+
+logger = logging.getLogger(__name__)
 
 class LSystem:
     """
@@ -33,8 +36,11 @@ class LSystem:
         - výsledný řetězec po aplikaci pravidel
         """
         result = self.axiom
-        for _ in range(iterations):
+        for i in range(iterations):
+            logger.debug(f"L-System iteration {i+1}/{iterations}, length: {len(result)}")
             result = self._apply_rules(result)
+        
+        logger.debug(f"Final L-System string length: {len(result)}")
         return result
     
     def _apply_rules(self, string):
@@ -113,10 +119,10 @@ class LSystem:
             system = cls(
                 axiom="F",
                 rules={
-                    "F": "FF[+F][-F]F",
+                    "F": "FF[+F][-F][+++F][---F]F",
                     "X": "F[-FX]+FX"
                 },
-                angle=22.5
+                angle=20.0
             )
         elif tree_type == "oak":
             # Listnatý strom - široká koruna
@@ -131,9 +137,28 @@ class LSystem:
         elif tree_type == "bush":
             # Keř - nízký s hustými větvemi
             system = cls(
+                axiom="FFFFF",  # Start with a short trunk
+                rules={
+                    "F": "F[+F]F[-F][+++F][---F]F"
+                },
+                angle=35.0  # Wider angle for more spread-out branches
+            )
+        elif tree_type == "willow":
+            # Vrba - dlouhé převislé větve
+            system = cls(
                 axiom="F",
                 rules={
-                    "F": "FF[+F][-F][++F][--F]F"
+                    "F": "FF[-F][-F][-F][-F]"
+                },
+                angle=15.0
+            )
+        elif tree_type == "palm":
+            # Palma - vysoký kmen s korunou nahoře
+            system = cls(
+                axiom="FFFFF[X]",
+                rules={
+                    "F": "FF",
+                    "X": "[-FX][+FX][--FX][++FX]"
                 },
                 angle=25.0
             )
@@ -147,8 +172,13 @@ class LSystem:
                 angle=25.0
             )
             
+        # Log the selected tree type and rules
+        logger.info(f"Created L-system for tree type: {tree_type}")
+        logger.info(f"Starting rules: {system.rules}")
+            
         # Přidání náhodnosti
         if randomness > 0:
             system.add_randomness(randomness)
+            logger.info(f"Applied randomness ({randomness}). Updated rules: {system.rules}")
             
         return system
