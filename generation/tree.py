@@ -6,6 +6,9 @@ import math
 import numpy as np
 import pyrr
 from generation.l_system import LSystem
+import logging
+
+logger = logging.getLogger('FractalForest.Tree')
 
 class Tree:
     """Třída reprezentující 3D model stromu"""
@@ -33,12 +36,21 @@ class Tree:
     
     def generate(self, iterations=3):
         """Generuje 3D model stromu pomocí L-systému"""
+        logger.debug(f"Generating {self.tree_type} tree with {iterations} iterations")
+        
         # Vygenerujeme řetězec představující strom
         l_string = self.l_system.generate(iterations)
+        logger.debug(f"L-string generated, length: {len(l_string)}")
         
         # Převedeme řetězec na 3D model
         self.geometry = self._interpret_l_string(l_string)
         
+        if self.geometry:
+            vertices, normals, indices = self.geometry
+            logger.debug(f"Tree geometry created: {len(vertices)} vertices, {len(indices)} indices")
+        else:
+            logger.error("Failed to generate tree geometry")        
+    
     def _interpret_l_string(self, l_string):
         """
         Interpretuje řetězec L-systému jako 3D geometrii
