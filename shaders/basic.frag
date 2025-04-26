@@ -12,8 +12,8 @@ uniform vec3 light_position;  // Pozice světla
 uniform vec3 light_color;     // Barva světla
 uniform float ambient_strength;  // Síla ambientního světla
 
-// Parametry materiálu (později mohou být uniformy)
-vec3 object_color = vec3(0.3, 0.5, 0.2);  // Základní barva objektu (zelená pro stromy)
+// Parametry materiálu - přidána uniform
+uniform vec3 object_color = vec3(0.3, 0.5, 0.2);  // Základní barva objektu (zelená pro stromy)
 
 void main() {
     // Normalizace normály (mohla být změněna interpolací)

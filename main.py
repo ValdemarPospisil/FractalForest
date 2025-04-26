@@ -26,16 +26,13 @@ class FractalForest:
         
         # Inicializace kamery
         self.camera = Camera(self.window.width, self.window.height)
-        if self.camera == None:
-            print("camera is null")
+        
         # Inicializace rendereru
         self.renderer = Renderer(self.ctx, self.camera)
-        if self.renderer == None:
-            print("renderer is null")
+        
         # Inicializace uživatelského rozhraní
         self.interface = Interface()
-        if self.interface == None:
-            print("Interface is null")
+        
         # Základní parametry lesa
         self.forest_params = {
             'size': 50,
@@ -54,6 +51,13 @@ class FractalForest:
         # Flag pro režim procházení
         self.walk_mode = False
         
+        # Nastavení klávesnice pro ovládání kamery
+        self.keys = pyglet.window.key.KeyStateHandler()
+        self.window.push_handlers(self.keys)
+        
+        # Nastavení časovače pro aktualizaci kamery
+        pyglet.clock.schedule_interval(self.update, 1/60.0)
+        
     def generate_forest(self):
         """Generuje nový les podle aktuálních parametrů"""
         self.forest = Forest(
@@ -63,6 +67,11 @@ class FractalForest:
             season=self.forest_params['season']
         )
         self.forest.generate()
+        
+        # Důležité: Vytvoření VAO pro všechny stromy v lese
+        # Toto je kritický krok, který chyběl - připraví geometrie stromů pro vykreslení
+        for tree in self.forest.trees:
+            self.renderer.create_tree_vao(tree)
         
     def setup_events(self):
         """Nastavení event handlerů pro pyglet"""
@@ -76,20 +85,15 @@ class FractalForest:
             self.ctx.clear(0.5, 0.7, 1.0)
             self.renderer.render(self.forest)
             
+            # Vykreslení UI
+            self.interface.draw()
+            
         @self.window.event
         def on_key_press(symbol, modifiers):
-            # Pohyb kamery
-            if symbol == pyglet.window.key.W:
-                self.camera.move_forward()
-            elif symbol == pyglet.window.key.S:
-                self.camera.move_backward()
-            elif symbol == pyglet.window.key.A:
-                self.camera.move_left()
-            elif symbol == pyglet.window.key.D:
-                self.camera.move_right()
+            # Pohyb kamery je nyní řešen v update()
                 
             # Přepnutí režimu
-            elif symbol == pyglet.window.key.TAB:
+            if symbol == pyglet.window.key.TAB:
                 self.walk_mode = not self.walk_mode
                 if self.walk_mode:
                     self.camera.set_walk_mode()
@@ -106,8 +110,20 @@ class FractalForest:
                 
         @self.window.event
         def on_mouse_motion(x, y, dx, dy):
-            if self.walk_mode:
-                self.camera.rotate(dx, dy)
+            # Otáčení kamery pomocí myši - necháme aktivní bez ohledu na režim
+            self.camera.rotate(dx, dy)
+    
+    def update(self, dt):
+        """Aktualizuje stav aplikace (pohyb kamery)"""
+        # Zpracování pohybu kamery podle stisknutých kláves
+        if self.keys[pyglet.window.key.W]:
+            self.camera.move_forward()
+        if self.keys[pyglet.window.key.S]:
+            self.camera.move_backward()
+        if self.keys[pyglet.window.key.A]:
+            self.camera.move_left()
+        if self.keys[pyglet.window.key.D]:
+            self.camera.move_right()
                 
     def run(self):
         """Spustí hlavní smyčku aplikace"""

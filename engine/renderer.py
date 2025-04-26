@@ -49,6 +49,9 @@ class Renderer:
         # Nastavení modelové matice pro strom
         self.basic_shader.set_uniform('model', tree.get_model_matrix())
         
+        # Nastavení barvy stromu
+        self.basic_shader.set_uniform('object_color', tree.color)
+        
         # Vykreslení stromu
         tree.vao.render()
         
@@ -60,17 +63,25 @@ class Renderer:
         # Získání dat geometrie
         vertices, normals, indices = tree.geometry
         
-        # Vytvoření vertex bufferu
-        vertex_buffer = self.ctx.buffer(vertices.astype('f4').tobytes())
-        normal_buffer = self.ctx.buffer(normals.astype('f4').tobytes())
-        index_buffer = self.ctx.buffer(indices.astype('i4').tobytes())
-        
-        # Vytvoření VAO
-        tree.vao = self.ctx.vertex_array(
-            self.basic_shader.program,
-            [
-                (vertex_buffer, '3f', 'position'),
-                (normal_buffer, '3f', 'normal')
-            ],
-            index_buffer
-        )
+        # Kontrola, zda geometrie obsahuje platná data
+        if len(vertices) == 0 or len(normals) == 0 or len(indices) == 0:
+            print(f"Prázdná geometrie pro strom typu {tree.tree_type}")
+            return
+            
+        try:
+            # Vytvoření vertex bufferu
+            vertex_buffer = self.ctx.buffer(vertices.astype('f4').tobytes())
+            normal_buffer = self.ctx.buffer(normals.astype('f4').tobytes())
+            index_buffer = self.ctx.buffer(indices.astype('i4').tobytes())
+            
+            # Vytvoření VAO
+            tree.vao = self.ctx.vertex_array(
+                self.basic_shader.program,
+                [
+                    (vertex_buffer, '3f', 'position'),
+                    (normal_buffer, '3f', 'normal')
+                ],
+                index_buffer
+            )
+        except Exception as e:
+            print(f"Chyba při vytváření VAO: {e}")
