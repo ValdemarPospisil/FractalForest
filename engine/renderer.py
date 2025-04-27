@@ -9,53 +9,117 @@ class Renderer:
         frag_src = open('shaders/basic.frag').read()
         self.prog = self.ctx.program(vertex_shader=vert_src, fragment_shader=frag_src)
 
-        # Nastavení projekční matice (pravděpodobně perspektivní nebo ortografická)
+        # Set up projection matrix (orthographic or perspective)
         aspect_ratio = 800 / 600
-        proj = np.array([
-            [1.0/aspect_ratio, 0.0, 0.0, 0.0],
-            [0.0, 1.0,         0.0, 0.0],
-            [0.0, 0.0,         1.0, 0.0],
-            [0.0, 0.0,         0.0, 1.0]
-        ], dtype='f4')
-        self.prog['projection'].write(proj.tobytes())
+        fov = 45.0  # Field of view in degrees
+        near = 0.1
+        far = 100.0
+        
+        # Create perspective projection matrix
+        self.proj = self.perspective_matrix(fov, aspect_ratio, near, far)
+        self.prog['projection'].write(self.proj.tobytes())
 
         self.color = (0.3, 0.2, 0.1, 1.0)
-        self.buffer = None
+        self.vbo = None
+        self.ibo = None
+        self.vao = None
+        self._init_ground_plane()
 
-    def update_tree(self, tree):
-        if self.buffer:
-            self.buffer.release()
+    def perspective_matrix(self, fov, aspect, near, far):
+        """Create a perspective projection matrix"""
+        fov_rad = np.radians(fov)
+        f = 1.0 / np.tan(fov_rad / 2.0)
+        
+        return np.array([
+            [f / aspect, 0.0, 0.0, 0.0],
+            [0.0, f, 0.0, 0.0],
+            [0.0, 0.0, (far + near) / (near - far), -1.0],
+            [0.0, 0.0, (2.0 * far * near) / (near - far), 0.0]
+        ], dtype='f4')
 
-        # tree.vertices musí obsahovat [position.x, position.y, position.z, normal.x, normal.y, normal.z]
-        data = tree.vertices.tobytes()
-        self.buffer = self.ctx.buffer(data)
-
-        # Vytvoření VAO - musíme připojit i normály
-        self.vao = self.ctx.vertex_array(
-            self.prog,
+    def _init_ground_plane(self):
+        # Create a large flat plane (10x10 units)
+        vertices = np.array([
+            # Position         # Normal (up)
+            -5, 0, -5,        0, 1, 0,  # Bottom-left
+            -5, 0,  5,        0, 1, 0,  # Top-left
+             5, 0,  5,        0, 1, 0,  # Top-right
+             5, 0, -5,        0, 1, 0,  # Bottom-right
+        ], dtype='f4')
+        
+        indices = np.array([
+            0, 1, 2,
+            0, 2, 3
+        ], dtype='i4')
+        
+        vert_src = open('shaders/basic.vert').read()
+        frag_src = open('shaders/basic.frag').read()
+             
+        self.ground_vao = self.ctx.vertex_array(
+            self.ctx.program(vertex_shader=vert_src, fragment_shader=frag_src),  # Use same shader as your tree or create a simple one
             [
-                (self.buffer, '3f 3f', 'position', 'normal')
-            ]
+                (self.ctx.buffer(vertices), '3f 3f', 'position', 'normal'),
+            ],
+            index_buffer=self.ctx.buffer(indices)
         )
 
-    def render(self):
+    def update_tree(self, tree):
+        # Release previous buffers if they exist
+        if self.vbo:
+            self.vbo.release()
+        if self.ibo:
+            self.ibo.release()
+        if self.vao:
+            self.vao.release()
+
+        # Get vertex data and indices from the tree
+        vertices = tree.vertices
+        indices = tree.indices
+
+        # Create vertex buffer
+        self.vbo = self.ctx.buffer(vertices.tobytes())
+        
+        # Create index buffer
+        self.ibo = self.ctx.buffer(indices.tobytes())
+
+        # Create vertex array object with both position and normal attributes
+        self.vao = self.ctx.vertex_array(
+            self.prog,
+            [(self.vbo, '3f 3f', 'position', 'normal')],
+            self.ibo
+        )
+
+    def render(self, camera_pos, view_matrix):
+
+        self._render_ground(view_matrix)
+
+        # Clear the framebuffer
         self.ctx.clear(0.5, 0.7, 1.0)
+        self.ctx.enable(moderngl.DEPTH_TEST)
+        self.ctx.enable(moderngl.CULL_FACE)
 
-        # Nastavit model a view matici
-        model = np.eye(4, dtype='f4')  # jednoduchá jednotková matice
-        view = np.eye(4, dtype='f4')   # taky zatím jednoduchá (např. kamera v 0,0,0)
+        # Simple model matrix (identity for now)
+        model = np.eye(4, dtype='f4')
 
-        # Normal matrix
-        normal_matrix = np.linalg.inv(model[:3, :3]).T  # Inverzní + transpozice
-
-        # Zapsat do shaderu
+        # Set uniforms for model and view matrices
         self.prog['model'].write(model.tobytes())
-        self.prog['view'].write(view.tobytes())
+        self.prog['view'].write(view_matrix.tobytes())
 
-        # Poslat světlo a barvu (pokud máš uniformy light_position, light_color, ambient_strength)
+        # Set lighting parameters
         self.prog['light_position'].value = (10.0, 10.0, 10.0)
         self.prog['light_color'].value = (1.0, 1.0, 1.0)
-        self.prog['ambient_strength'].value = 0.2
-        self.prog['object_color'].value = (0.3, 0.5, 0.2)  # zelená pro stromy
+        self.prog['ambient_strength'].value = 0.3
+        self.prog['object_color'].value = self.color
 
-        self.vao.render(mode=moderngl.LINES)  # asi budeš chtít TRIANGLES, ne LINES
+        # Render the tree as triangles
+        if self.vao:
+            self.vao.render(mode=moderngl.TRIANGLES)
+
+
+    def _render_ground(self, view_matrix):
+        # Simple ground shader with grid pattern
+        ground_color = (0.3, 0.3, 0.3)  # Dark gray
+        grid_color = (0.5, 0.5, 0.5)    # Light gray
+        
+        # Set uniforms and render
+        self.ground_vao.program['view'].write(vier()

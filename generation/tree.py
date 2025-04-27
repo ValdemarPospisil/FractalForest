@@ -20,36 +20,52 @@ class Tree:
         
         # Build the mesh
         self._build_mesh()
-        logger.info(f"Created tree mesh of type '{tree_type}' with {len(self.vertices)//6} vertices")
 
     def _build_mesh(self):
         """Build tree vertices and indices for rendering as triangles"""
         # First generate the branch endpoints
         branch_segments = self._generate_branch_segments()
-        
-        # Then convert these segments to 3D cylindrical branches
+    
+    # Then convert these segments to 3D cylindrical branches
         vertices, normals, indices = self._create_cylindrical_branches(branch_segments)
-        
+    
         # Add leaf points based on tree type
         leaf_vertices, leaf_normals, leaf_indices = self._add_leaves(branch_segments)
-        
-        # Combine branch and leaf geometry
+    
+    # Combine branch and leaf geometry
         if len(leaf_vertices) > 0:
-            # Calculate offset for indices
-            index_offset = len(vertices) // 6
-            
-            # Adjust leaf indices
-            adjusted_leaf_indices = [idx + index_offset for idx in leaf_indices]
-            
-            # Combine arrays
+        # Reshape vertices if they're 1D arrays
+            if vertices.ndim == 1:
+            # Assuming each vertex has 6 components (position + normal)
+                vertices = vertices.reshape(-1, 6)
+            if leaf_vertices.ndim == 1:
+                leaf_vertices = leaf_vertices.reshape(-1, 6)
+        
+        # Now check shapes
+            logger.debug(f"Branch vertices shape: {vertices.shape}")
+            logger.debug(f"Leaf vertices shape: {leaf_vertices.shape}")
+        
+            if vertices.shape[1] != leaf_vertices.shape[1]:
+                raise ValueError(
+                    f"Cannot concatenate vertices with shapes {vertices.shape} and {leaf_vertices.shape}. "
+                    "Branch and leaf vertex structures must match."
+                )
+        
+        # Calculate offset for indices
+            index_offset = vertices.shape[0]  # Number of vertices before adding leaves
+        
+        # Adjust leaf indices
+            adjusted_leaf_indices = leaf_indices + index_offset
+        
+        # Combine arrays
             vertices = np.vstack([vertices, leaf_vertices])
             normals = np.vstack([normals, leaf_normals])
             indices = np.concatenate([indices, adjusted_leaf_indices])
-        
-        # Store final mesh data
+    
+    # Store final mesh data
         self.vertices = vertices
         self.normals = normals
-        self.indices = indices
+        self.indices = indices    
 
     def _generate_branch_segments(self):
         """Generate the basic branch segments from L-system instructions"""

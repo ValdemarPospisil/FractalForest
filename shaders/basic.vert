@@ -1,27 +1,32 @@
 #version 330 core
 
-// Vstupní atributy
+// Input attributes
 in vec3 position;
 in vec3 normal;
 
-// Výstupní proměnné pro fragment shader
+// Output to fragment shader
 out vec3 frag_position;
 out vec3 frag_normal;
+out vec3 frag_color;  // Added for ground plane coloring
 
-// Uniformní proměnné
-uniform mat4 model;      // Model matice
-uniform mat4 view;       // Pohledová matice
-uniform mat4 projection; // Projekční matice
+// Uniforms
+uniform mat4 model;
+uniform mat4 view;
+uniform mat4 projection;
+uniform vec3 object_color;  // Added for per-object color
 
 void main() {
-    // Transformace pozice
+    // Transform position
     vec4 worldPos = model * vec4(position, 1.0);
     frag_position = worldPos.xyz;
     
-    // Správná transformace normál pomocí inverzně-transponované model matice
+    // Transform normal
     mat3 normalMatrix = transpose(inverse(mat3(model)));
-    frag_normal = normalMatrix * normal;
+    frag_normal = normalize(normalMatrix * normal);
     
-    // Výsledná pozice ve clip space
+    // Pass color to fragment shader
+    frag_color = object_color;
+    
+    // Final position
     gl_Position = projection * view * worldPos;
 }
