@@ -17,6 +17,7 @@ uniform float ambient_strength = 0.2;
 uniform bool is_ground = false;
 uniform vec3 ground_color1 = vec3(0.3, 0.3, 0.3);
 uniform vec3 ground_color2 = vec3(0.5, 0.5, 0.5);
+uniform vec4 object_color = vec4(0.3, 0.5, 0.2, 1.0);
 
 void main() {
     vec3 norm = normalize(frag_normal);
@@ -32,7 +33,7 @@ void main() {
     // Special ground rendering
     if (is_ground) {
         // Create grid pattern
-        float grid_size = 1.0;
+        float grid_size = 5.0;  // Larger grid size
         vec2 coord = frag_position.xz / grid_size;
         vec2 grid = abs(fract(coord - 0.5) - 0.5) / fwidth(coord);
         float line = min(grid.x, grid.y);
@@ -44,6 +45,15 @@ void main() {
     } 
     // Regular object rendering
     else {
-        out_color = vec4((ambient + diffuse) * frag_color, 1.0);
+        // Add specular component for trees to make them more visible
+        float specular_strength = 0.5;
+        vec3 view_dir = normalize(-frag_position);  // Camera at origin in view space
+        vec3 reflect_dir = reflect(-light_dir, norm);
+        float spec = pow(max(dot(view_dir, reflect_dir), 0.0), 32);
+        vec3 specular = specular_strength * spec * light_color;
+        
+        // Final color with higher ambient for better visibility
+        vec3 result = (ambient * 1.5 + diffuse * 0.8 + specular) * frag_color;
+        out_color = vec4((ambient + diffuse) * object_color.rgb, object_color.a);
     }
 }

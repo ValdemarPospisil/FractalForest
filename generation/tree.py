@@ -154,15 +154,23 @@ class Tree:
         
         return segments
 
-    def _rotation_matrix(self, theta, axis='z'):
-        """Create a rotation matrix around the specified axis"""
-        # For simplicity we'll use Z-axis rotation (around "forward" axis)
-        # In a more advanced system, we'd calculate proper Euler angles or quaternions
+    def _rotation_matrix(self, angle_deg):
+        """Random rotation around a random axis"""
+        angle = math.radians(angle_deg)
+        axis = np.random.normal(size=3)
+        axis /= np.linalg.norm(axis)
+    
+        x, y, z = axis
+        cos = math.cos(angle)
+        sin = math.sin(angle)
+        C = 1 - cos
+    
         return np.array([
-            [math.cos(theta), -math.sin(theta), 0.0],
-            [math.sin(theta), math.cos(theta), 0.0],
-            [0.0, 0.0, 1.0]
+            [cos + x*x*C,     x*y*C - z*sin, x*z*C + y*sin],
+            [y*x*C + z*sin, cos + y*y*C,     y*z*C - x*sin],
+            [z*x*C - y*sin, z*y*C + x*sin, cos + z*z*C]
         ], dtype='f4')
+ 
 
     def _create_cylindrical_branches(self, segments):
         """Convert branch segments to 3D cylinders"""
