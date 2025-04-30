@@ -350,3 +350,334 @@ class Tree:
             max(0, min(255, needle_color[1] + g_var * 255)),
             needle_color[2]
         )
+        
+        # Jehličí jako kužel
+        needle_size = 0.25 - 0.03 * depth  # Menší jehličí na hlubších větvích
+        
+        # Vytvoření entity jehličí
+        needle = Entity(
+            parent=parent,
+            model='cone',
+            color=needle_color,
+            position=Vec3(*position),
+            scale=(needle_size, needle_size*2, needle_size),
+            rotation=Quat().setFromAxisAngle(random.uniform(0, 360), Vec3(0, 1, 0))
+        )
+        
+        # Přidáme několik jehliček kolem konce větve
+        for _ in range(random.randint(3, 6)):
+            offset = [random.uniform(-0.15, 0.15) for _ in range(3)]
+            needle = Entity(
+                parent=parent,
+                model='cone',
+                color=needle_color,
+                position=Vec3(*(position + offset)),
+                scale=(needle_size * 0.8, needle_size*1.8, needle_size * 0.8),
+                rotation=Quat().setFromAxisAngle(random.uniform(0, 360), Vec3(0, 1, 0))
+            )
+
+    def _add_palm_leaves(self, parent, position):
+        """
+        Přidá palmové listy na konec kmene
+        
+        Parametry:
+        - parent: rodičovská entita
+        - position: pozice konce kmene
+        """
+        # Palmové listy jsou dlouhé a vycházejí z jednoho místa
+        leaf_count = random.randint(6, 9)
+        leaf_color = color.rgb(30, 120, 30)  # Zelená barva listů
+        
+        # Pozice mírně nad koncem kmene
+        palm_top = position + np.array([0, 0.3, 0])
+        
+        # Přidání náhodnosti do barvy
+        r_var = random.uniform(-self.color_variance, self.color_variance)
+        g_var = random.uniform(-self.color_variance, self.color_variance)
+        leaf_color = color.rgb(
+            max(0, min(255, leaf_color[0] + r_var * 255)),
+            max(0, min(255, leaf_color[1] + g_var * 255)),
+            leaf_color[2]
+        )
+        
+        # Vytvoření koruny palmy
+        palm_crown = Entity(
+            parent=parent,
+            model='sphere',
+            color=color.rgb(60, 40, 20),  # Hnědá barva pro základ listů
+            position=Vec3(*palm_top),
+            scale=0.3
+        )
+        
+        # Vytvoření jednotlivých listů
+        for i in range(leaf_count):
+            # Úhel pro tento list
+            angle = (i / leaf_count) * 360
+            
+            # Směr listu - vodorovně ven a mírně nahoru
+            angle_rad = math.radians(angle)
+            direction = np.array([
+                math.cos(angle_rad),
+                0.4 + random.uniform(-0.1, 0.1),  # Mírně nahoru s variací
+                math.sin(angle_rad)
+            ])
+            direction = direction / np.linalg.norm(direction)
+            
+            # Délka listu
+            leaf_length = 2.0 + random.uniform(-0.3, 0.3)
+            
+            # Konec listu
+            leaf_end = palm_top + direction * leaf_length
+            
+            # Generování bodů podél listu pro křivku
+            curve_points = []
+            curve_segments = 8
+            
+            for j in range(curve_segments + 1):
+                # Faktor pozice na listu (0 = začátek, 1 = konec)
+                t = j / curve_segments
+                
+                # Pozice na přímce mezi začátkem a koncem
+                linear_pos = palm_top + direction * (t * leaf_length)
+                
+                # Přidání zaoblení - list se prohýbá dolů
+                bend_factor = 4.0 * t * (1 - t)  # Parabola s maximem v t=0.5
+                bend_amount = 0.5  # Maximální prohnutí dolů
+                
+                # Aplikace prohnutí dolů
+                bend_pos = linear_pos - np.array([0, bend_factor * bend_amount, 0])
+                
+                curve_points.append(bend_pos)
+            
+            # Tloušťka listu
+            leaf_thickness = 0.08
+            
+            # Barva listu - trochu světlejší na konci
+            end_leaf_color = color.rgb(
+                leaf_color[0] + 20,
+                leaf_color[1] + 20,
+                leaf_color[2]
+            )
+            
+            # Vytvoření segmentů listu
+            for j in range(curve_segments):
+                segment_start = curve_points[j]
+                segment_end = curve_points[j+1]
+                segment_length = np.linalg.norm(segment_end - segment_start)
+                segment_center = (segment_start + segment_end) / 2
+                
+                # Výpočet směru segmentu
+                segment_dir = segment_end - segment_start
+                segment_dir = segment_dir / np.linalg.norm(segment_dir)
+                
+                # Barva segmentu - lineární přechod od začátku do konce
+                segment_color = color.rgb(
+                    leaf_color[0] + (end_leaf_color[0] - leaf_color[0]) * (j / curve_segments),
+                    leaf_color[1] + (end_leaf_color[1] - leaf_color[1]) * (j / curve_segments),
+                    leaf_color[2] + (end_leaf_color[2] - leaf_color[2]) * (j / curve_segments)
+                )
+                
+                # Tloušťka se zmenšuje směrem ke konci
+                segment_thickness = leaf_thickness * (1 - j/curve_segments * 0.7)
+                
+                # Výchozí cylindr v Ursině je orientován podél osy Y
+                default_direction = np.array([0, 1, 0])
+                
+                # Výpočet rotace
+                if np.isclose(np.abs(np.dot(segment_dir, default_direction)), 1.0, atol=1e-6):
+                    rotation_quat = Quat()
+                else:
+                    axis = np.cross(default_direction, segment_dir)
+                    axis = axis / np.linalg.norm(axis)
+                    angle = np.arccos(np.dot(default_direction, segment_dir))
+                    rotation_quat = Quat()
+                    rotation_quat.setFromAxisAngle(angle, Vec3(*axis))
+                
+                # Vytvoření segmentu listu
+                leaf_segment = Entity(
+                    parent=parent,
+                    model='cylinder',
+                    color=segment_color,
+                    position=Vec3(*segment_center),
+                    scale=(segment_thickness, segment_length, segment_thickness * 0.5),  # Zploštělý válec
+                    rotation=rotation_quat
+                )
+                
+                # Pro první segment přidáme i boční listy
+                if j < 3 and j % 2 == 0:
+                    # Přidání bočních lístků kolmo k hlavnímu listu
+                    self._add_palm_leaflets(parent, segment_center, segment_dir, segment_thickness, leaf_color)
+
+    def _add_palm_leaflets(self, parent, position, main_direction, thickness, base_color):
+        """
+        Přidá boční lístky na palmový list
+        
+        Parametry:
+        - parent: rodičovská entita
+        - position: pozice na hlavním listu
+        - main_direction: směr hlavního listu
+        - thickness: tloušťka hlavního listu
+        - base_color: základní barva
+        """
+        # Počet lístků na každé straně
+        leaflet_count = random.randint(3, 5)
+        
+        # Nalezení směru kolmého k hlavnímu listu
+        up_vector = np.array([0, 1, 0])
+        side_vector = np.cross(main_direction, up_vector)
+        side_vector = side_vector / np.linalg.norm(side_vector)
+        
+        for i in range(leaflet_count):
+            # Vytvořím lístky na obou stranách
+            for side in [-1, 1]:
+                # Pozice lístku - mírně odsazené od hlavního listu
+                side_pos = position + side_vector * side * thickness * 1.2
+                
+                # Směr lístku - kolmo od hlavního listu a mírně dopředu
+                side_dir = side_vector * side + main_direction * 0.3
+                side_dir = side_dir / np.linalg.norm(side_dir)
+                
+                # Délka lístku
+                leaflet_length = 0.3 + random.uniform(-0.05, 0.05)
+                
+                # Konec lístku
+                leaflet_end = side_pos + side_dir * leaflet_length
+                
+                # Střed lístku
+                leaflet_center = (side_pos + leaflet_end) / 2
+                
+                # Tloušťka lístku
+                leaflet_thickness = thickness * 0.4
+                
+                # Barva lístku - trochu světlejší
+                leaflet_color = color.rgb(
+                    min(255, base_color[0] + 15),
+                    min(255, base_color[1] + 15),
+                    base_color[2]
+                )
+                
+                # Výchozí cylindr v Ursině je orientován podél osy Y
+                default_direction = np.array([0, 1, 0])
+                
+                # Výpočet rotace
+                if np.isclose(np.abs(np.dot(side_dir, default_direction)), 1.0, atol=1e-6):
+                    rotation_quat = Quat()
+                else:
+                    axis = np.cross(default_direction, side_dir)
+                    axis = axis / np.linalg.norm(axis)
+                    angle = np.arccos(np.dot(default_direction, side_dir))
+                    rotation_quat = Quat()
+                    rotation_quat.setFromAxisAngle(angle, Vec3(*axis))
+                
+                # Vytvoření lístku
+                leaflet = Entity(
+                    parent=parent,
+                    model='cylinder',
+                    color=leaflet_color,
+                    position=Vec3(*leaflet_center),
+                    scale=(leaflet_thickness, leaflet_length, leaflet_thickness * 0.3),  # Zploštělý válec
+                    rotation=rotation_quat
+                )
+
+    # Konverze moderngl meshe na Ursina mesh
+    def convert_mesh_to_ursina(self):
+        """
+        Převede interní geometrii na Ursina Mesh
+        
+        Vrací:
+        - objekt Mesh pro použití v Ursina
+        """
+        # Pro vytvoření Ursina mesh potřebujeme:
+        # 1. Vrcholy
+        # 2. Trojúhelníky (indexy)
+        # 3. UV koordináty (můžeme použít výchozí)
+        # 4. Normály
+        
+        if not hasattr(self, 'vertices') or len(self.branches) == 0:
+            logger.warning("Pokus o konverzi prázdného meshe!")
+            return None
+        
+        # Pro každou větev vytvoříme válec
+        vertices = []
+        triangles = []
+        uvs = []
+        normals = []
+        
+        vertex_index = 0
+        
+        for branch in self.branches:
+            start_pos = branch['start']
+            end_pos = branch['end']
+            radius = branch['radius']
+            
+            # Výpočet směru válce
+            direction = end_pos - start_pos
+            direction_length = np.linalg.norm(direction)
+            if direction_length < 0.0001:
+                continue
+            
+            direction = direction / direction_length
+            
+            # Vytvoření kolmého vektoru
+            perpendicular = np.array([1.0, 0.0, 0.0])
+            if abs(np.dot(direction, perpendicular)) > 0.9:
+                perpendicular = np.array([0.0, 1.0, 0.0])
+            
+            # Nalezení dvou kolmých vektorů pro vytvoření kruhu
+            perpendicular = perpendicular - direction * np.dot(direction, perpendicular)
+            perpendicular = perpendicular / np.linalg.norm(perpendicular)
+            
+            binormal = np.cross(direction, perpendicular)
+            binormal = binormal / np.linalg.norm(binormal)
+            
+            # Počet segmentů po obvodu
+            segments = 8
+            
+            # Vytvoření kruhu na začátku a na konci
+            for end in [0, 1]:
+                pos = start_pos if end == 0 else end_pos
+                
+                for i in range(segments):
+                    angle = 2 * math.pi * i / segments
+                    
+                    # Pozice vrcholu na kružnici
+                    offset = perpendicular * math.cos(angle) + binormal * math.sin(angle)
+                    vertex = pos + offset * radius
+                    
+                    vertices.append(vertex)
+                    
+                    # Normála - směřuje ven od osy válce
+                    normal = offset  # Již normalizovaný
+                    normals.append(normal)
+                    
+                    # UV koordináty (jednoduché mapování)
+                    u = i / segments
+                    v = end
+                    uvs.append(np.array([u, v]))
+            
+            # Vytvoření trojúhelníků mezi začátkem a koncem
+            for i in range(segments):
+                i1 = vertex_index + i
+                i2 = vertex_index + (i + 1) % segments
+                i3 = vertex_index + i + segments
+                i4 = vertex_index + (i + 1) % segments + segments
+                
+                # Dva trojúhelníky tvoří jeden obdélník
+                triangles.append([i1, i2, i3])
+                triangles.append([i2, i4, i3])
+            
+            vertex_index += segments * 2
+        
+        # Převod na numpy pole pro Ursina
+        vertices = np.array(vertices, dtype=np.float32)
+        triangles = np.array(triangles, dtype=np.int32)
+        uvs = np.array(uvs, dtype=np.float32)
+        normals = np.array(normals, dtype=np.float32)
+        
+        # Vytvoření Ursina Mesh
+        return Mesh(
+            vertices=vertices, 
+            triangles=triangles,
+            uvs=uvs,
+            normals=normals
+        )
