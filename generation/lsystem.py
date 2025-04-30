@@ -37,10 +37,10 @@ class LSystem:
         """
         result = self.axiom
         for i in range(iterations):
-            logger.debug(f"L-System iteration {i+1}/{iterations}, length: {len(result)}")
+            logger.debug(f"L-System iterace {i+1}/{iterations}, délka: {len(result)}")
             result = self._apply_rules(result)
         
-        logger.debug(f"Final L-System string length: {len(result)}")
+        logger.debug(f"Výsledná délka L-System řetězce: {len(result)}")
         return result
     
     def _apply_rules(self, string):
@@ -108,7 +108,7 @@ class LSystem:
         Vytvoří L-systém pro konkrétní typ stromu
         
         Parametry:
-        - tree_type: typ stromu (pine, oak, bush, ...)
+        - tree_type: typ stromu (pine, oak, bush, willow, palm)
         - randomness: míra náhodnosti v pravidlech (0.0 - 1.0)
         
         Vrací:
@@ -173,12 +173,12 @@ class LSystem:
             )
             
         # Log the selected tree type and rules
-        logger.info(f"Created L-system for tree type: {tree_type}")
-        logger.info(f"Starting rules: {system.rules}")
+        logger.info(f"Vytvořen L-systém pro typ stromu: {tree_type}")
+        logger.info(f"Výchozí pravidla: {system.rules}")
             
         # Přidání náhodnosti
         if randomness > 0:
             system.add_randomness(randomness)
-            logger.info(f"Applied randomness ({randomness}). Updated rules: {system.rules}")
+            logger.info(f"Použita náhodnost ({randomness}). Aktualizovaná pravidla: {system.rules}")
             
         return system

@@ -1,478 +1,352 @@
-import numpy as np
-import math
-import random
+"""
+Implementace stromu využívající L-systém
+"""
 import logging
+import random
+import math
+import numpy as np
+from ursina import *
 
 logger = logging.getLogger(__name__)
 
 class Tree:
-    def __init__(self, instructions: str, angle: float = 25.0, length: float = 0.1, branch_radius: float = 0.02, 
-                 tree_type: str = "pine"):
+    """
+    Třída reprezentující 3D strom
+    """
+    def __init__(self, instructions, angle=25.0, length=1.0, tree_type="pine"):
+        """
+        Inicializace stromu
+        
+        Parametry:
+        - instructions: řetězec s instrukcemi z L-systému
+        - angle: úhel natočení v stupních
+        - length: délka segmentu větve
+        - tree_type: typ stromu
+        """
         self.instructions = instructions
-        self.angle = math.radians(angle)
+        self.angle = angle
         self.length = length
-        self.branch_radius = branch_radius
         self.tree_type = tree_type
-        self.growth_factor = 0.0  # For animation, 0.0 to 1.0
-        self.vertices = None
-        self.normals = None
-        self.indices = None
         
-        # Build the mesh
-        self._build_mesh()
-
-    def _build_mesh(self):
-        """Build tree vertices and indices for rendering as triangles"""
-        # First generate the branch endpoints
-        branch_segments = self._generate_branch_segments()
-    
-    # Then convert these segments to 3D cylindrical branches
-        vertices, normals, indices = self._create_cylindrical_branches(branch_segments)
-    
-        # Add leaf points based on tree type
-        leaf_vertices, leaf_normals, leaf_indices = self._add_leaves(branch_segments)
-    
-    # Combine branch and leaf geometry
-        if len(leaf_vertices) > 0:
-        # Reshape vertices if they're 1D arrays
-            if vertices.ndim == 1:
-            # Assuming each vertex has 6 components (position + normal)
-                vertices = vertices.reshape(-1, 6)
-            if leaf_vertices.ndim == 1:
-                leaf_vertices = leaf_vertices.reshape(-1, 6)
+        # Parametry pro různé části stromu
+        self.trunk_radius = 0.1
+        self.radius_decay = 0.75  # Jak rychle se zužují větve
+        self.color_variance = 0.1  # Variance barvy
         
-        # Now check shapes
-            logger.debug(f"Branch vertices shape: {vertices.shape}")
-            logger.debug(f"Leaf vertices shape: {leaf_vertices.shape}")
+        # Analýza stromu
+        self.height = 0
+        self.branch_count = 0
         
-            if vertices.shape[1] != leaf_vertices.shape[1]:
-                raise ValueError(
-                    f"Cannot concatenate vertices with shapes {vertices.shape} and {leaf_vertices.shape}. "
-                    "Branch and leaf vertex structures must match."
-                )
+        # Seznam větví (pro pozdější vytvoření entit)
+        self.branches = []
         
-        # Calculate offset for indices
-            index_offset = vertices.shape[0]  # Number of vertices before adding leaves
+        # Interpretace instrukcí a vytvoření větví
+        self._interpret_instructions()
         
-        # Adjust leaf indices
-            adjusted_leaf_indices = leaf_indices + index_offset
+    def _interpret_instructions(self):
+        """
+        Interpretuje instrukce L-systému a vytváří segmenty stromu
+        """
+        logger.debug(f"Interpretace instrukcí L-systému, délka: {len(self.instructions)}")
         
-        # Combine arrays
-            vertices = np.vstack([vertices, leaf_vertices])
-            normals = np.vstack([normals, leaf_normals])
-            indices = np.concatenate([indices, adjusted_leaf_indices])
-    
-    # Store final mesh data
-        self.vertices = vertices
-        self.normals = normals
-        self.indices = indices    
-
-    def _generate_branch_segments(self):
-        """Generate the basic branch segments from L-system instructions"""
+        # Počáteční pozice a orientace
+        position = np.array([0.0, 0.0, 0.0])
+        direction = np.array([0.0, 1.0, 0.0])  # Směr nahoru (Y+)
+        
+        # Vytvoření rotačních matic
+        rotation_matrix_left = self._create_rotation_matrix(self.angle)
+        rotation_matrix_right = self._create_rotation_matrix(-self.angle)
+        
+        # Kořenoví běžci budou mít menší úhel větvení
+        rotation_matrix_shallow_left = self._create_rotation_matrix(self.angle / 2)
+        rotation_matrix_shallow_right = self._create_rotation_matrix(-self.angle / 2)
+        
+        # Zásobník pro větvení
         stack = []
-        pos = np.array([0.0, 0.0, 0.0], dtype='f4')  # Start at ground level
-        dir = np.array([0.0, 1.0, 0.0], dtype='f4')
+        current_radius = self.trunk_radius
         
-        # Track branch level for thickness
-        branch_level = 0
-        max_branch_level = 10  # Cap to prevent too thin branches
+        # Interpretace instrukcí
+        depth = 0
+        max_depth = 0
         
-        segments = []
-        thickness = 1.0  # Start with full thickness
+        for i, char in enumerate(self.instructions):
+            if char == 'F':  # Kresba větve
+                # Aktuální pozice
+                start_pos = position.copy()
+                
+                # Posun ve směru
+                position = position + direction * self.length
+                
+                # Zjištění maximální výšky
+                self.height = max(self.height, position[1])
+                
+                # Přidání větve
+                self.branches.append({
+                    'start': start_pos,
+                    'end': position.copy(),
+                    'radius': current_radius,
+                    'depth': depth
+                })
+                
+                # Počítání větví
+                self.branch_count += 1
+                
+            elif char == '+':  # Rotace doleva
+                direction = np.dot(rotation_matrix_left, direction)
+            elif char == '-':  # Rotace doprava
+                direction = np.dot(rotation_matrix_right, direction)
+            elif char == '&':  # Mělká rotace doleva (pro kořenové běžce)
+                direction = np.dot(rotation_matrix_shallow_left, direction)
+            elif char == '^':  # Mělká rotace doprava
+                direction = np.dot(rotation_matrix_shallow_right, direction)
+            elif char == '[':  # Uložení pozice a orientace
+                stack.append((position.copy(), direction.copy(), current_radius, depth))
+                depth += 1
+                max_depth = max(max_depth, depth)
+                current_radius *= self.radius_decay  # Zmenšení poloměru pro nové větve
+            elif char == ']':  # Obnovení pozice a orientace
+                position, direction, current_radius, depth = stack.pop()
         
-        for c in self.instructions:
-            if c == 'F':
-                # Calculate new position with randomness based on tree type
-                branch_length = self.length
-                
-                # Add tree-specific variations
-                if self.tree_type == "pine":
-                    # Pines have straighter branches
-                    randomness = 0.05
-                elif self.tree_type == "oak":
-                    # Oaks have more variation
-                    randomness = 0.2
-                elif self.tree_type == "bush":
-                    # Bushes are very variable
-                    randomness = 0.3
-                else:
-                    randomness = 0.1
-                    
-                branch_length *= (1.0 - randomness + 2 * randomness * random.random())
-                new_pos = pos + dir * branch_length
-                
-                # Store segment with thickness
-                segments.append((pos.copy(), new_pos.copy(), thickness))
-                pos = new_pos
-                
-            elif c == '+':
-                # Apply rotation with tree-specific randomness
-                if self.tree_type == "pine":
-                    # Pines have more regular angles
-                    rand_factor = 0.1
-                else:
-                    # Other trees have more variation
-                    rand_factor = 0.3
-                    
-                theta = self.angle * (1.0 - rand_factor + 2 * rand_factor * random.random())
-                rot = self._rotation_matrix(theta)
-                dir = rot.dot(dir)
-                dir = dir / np.linalg.norm(dir)
-                
-            elif c == '-':
-                # Apply rotation with tree-specific randomness
-                if self.tree_type == "pine":
-                    # Pines have more regular angles
-                    rand_factor = 0.1
-                else:
-                    # Other trees have more variation
-                    rand_factor = 0.3
-                    
-                theta = -self.angle * (1.0 - rand_factor + 2 * rand_factor * random.random())
-                rot = self._rotation_matrix(theta)
-                dir = rot.dot(dir)
-                dir = dir / np.linalg.norm(dir)
-                
-            elif c == '[':
-                # Push current state onto stack and increase branch level
-                stack.append((pos.copy(), dir.copy(), thickness))
-                branch_level = min(branch_level + 1, max_branch_level)
-                
-                # Reduce thickness for new branch - different for each tree type
-                if self.tree_type == "pine":
-                    thickness *= 0.7  # Thinner branches for pines
-                elif self.tree_type == "bush":
-                    thickness *= 0.85  # Thicker branches for bushes
-                else:
-                    thickness *= 0.8  # Default
-                
-            elif c == ']':
-                # Pop state from stack and decrease branch level
-                if stack:
-                    pos, dir, thickness = stack.pop()
-                    branch_level = max(branch_level - 1, 0)
+        logger.debug(f"Dokončena interpretace. Větví: {self.branch_count}, Výška: {self.height}")
         
-        return segments
-
-    def _rotation_matrix(self, angle_deg):
-        """Random rotation around a random axis"""
-        angle = math.radians(angle_deg)
-        axis = np.random.normal(size=3)
-        axis /= np.linalg.norm(axis)
-    
-        x, y, z = axis
-        cos = math.cos(angle)
-        sin = math.sin(angle)
-        C = 1 - cos
-    
+    def _create_rotation_matrix(self, angle_degrees):
+        """
+        Vytvoření rotační matice kolem osy Z
+        
+        Parametry:
+        - angle_degrees: úhel ve stupních
+        
+        Vrací:
+        - 3x3 rotační matice
+        """
+        # Konverze na radiány
+        angle_rad = math.radians(angle_degrees)
+        
+        # Rotace kolem Z
+        # [cos(a) -sin(a) 0]
+        # [sin(a)  cos(a) 0]
+        # [0       0      1]
+        cos_a = math.cos(angle_rad)
+        sin_a = math.sin(angle_rad)
+        
         return np.array([
-            [cos + x*x*C,     x*y*C - z*sin, x*z*C + y*sin],
-            [y*x*C + z*sin, cos + y*y*C,     y*z*C - x*sin],
-            [z*x*C - y*sin, z*y*C + x*sin, cos + z*z*C]
-        ], dtype='f4')
- 
-
-    def _create_cylindrical_branches(self, segments):
-        """Convert branch segments to 3D cylinders"""
-        vertices = []
-        normals = []
-        indices = []
+            [cos_a, -sin_a, 0],
+            [sin_a, cos_a,  0],
+            [0,     0,      1]
+        ])
+    
+    def create_entity(self, color=color.rgb(76, 153, 76)):
+        """
+        Vytvoří 3D entitu stromu v Ursině
         
-        # Number of sides for branch cylinders
-        sides = 6  # Hexagonal branches for performance
+        Parametry:
+        - color: základní barva stromu
         
-        vertex_count = 0
+        Vrací:
+        - kořenová entita stromu
+        """
+        # Vytvoření kořenové entity, ke které budou připojeny všechny části stromu
+        root_entity = Entity()
         
-        # Process each branch segment
-        for start_pos, end_pos, thickness in segments:
-            # Calculate branch direction and length
-            branch_dir = end_pos - start_pos
-            branch_length = np.linalg.norm(branch_dir)
-            if branch_length < 1e-6:
-                continue  # Skip zero-length branches
-                
-            branch_dir = branch_dir / branch_length
+        # Vytvoření jednotlivých větví jako válcovitých entit
+        for i, branch in enumerate(self.branches):
+            # Spočítání délky segmentu
+            segment_start = branch['start']
+            segment_end = branch['end']
+            segment_length = np.linalg.norm(segment_end - segment_start)
             
-            # Calculate a perpendicular vector for creating the cylinder
-            perp = self._perpendicular_vector(branch_dir)
-            perp = perp / np.linalg.norm(perp)
+            # Spočítání pozice středu segmentu
+            segment_center = (segment_start + segment_end) / 2
             
-            # Create vertices around both ends of the cylinder
-            for i in range(sides):
-                angle = 2 * math.pi * i / sides
-                
-                # Calculate rotation of perpendicular vector
-                cos_angle = math.cos(angle)
-                sin_angle = math.sin(angle)
-                normal = perp * cos_angle + np.cross(branch_dir, perp) * sin_angle
-                normal = normal / np.linalg.norm(normal)
-                
-                # Scale by thickness
-                scaled_normal = normal * thickness * self.branch_radius
-                
-                # Add vertices at start and end with normals
-                vertices.extend([start_pos[0] + scaled_normal[0], start_pos[1] + scaled_normal[1], 
-                               start_pos[2] + scaled_normal[2], normal[0], normal[1], normal[2]])
-                vertices.extend([end_pos[0] + scaled_normal[0], end_pos[1] + scaled_normal[1],
-                               end_pos[2] + scaled_normal[2], normal[0], normal[1], normal[2]])
-                
-                # Add indices for triangles (two triangles per side)
-                if i < sides - 1:
-                    # First triangle
-                    indices.extend([vertex_count + i*2, vertex_count + i*2 + 1, vertex_count + i*2 + 2])
-                    # Second triangle
-                    indices.extend([vertex_count + i*2 + 1, vertex_count + i*2 + 3, vertex_count + i*2 + 2])
-                else:
-                    # Connect back to first vertices
-                    indices.extend([vertex_count + i*2, vertex_count + i*2 + 1, vertex_count])
-                    indices.extend([vertex_count + i*2 + 1, vertex_count + 1, vertex_count])
+            # Variace barvy podle hloubky
+            depth_factor = min(branch['depth'] / 5.0, 1.0)
+            branch_color = self._get_branch_color(depth_factor, color)
             
-            vertex_count += sides * 2
+            # Výpočet rotace větve (směr od start do end)
+            direction = segment_end - segment_start
+            direction = direction / np.linalg.norm(direction)
+            
+            # Výchozí cylindr v Ursině je orientován podél osy Y
+            # Musíme najít rotaci z (0,1,0) na náš směr
+            default_direction = np.array([0, 1, 0])
+            
+            # Speciální případ - pokud směr je téměř shodný s výchozím, není potřeba rotace
+            if np.isclose(np.abs(np.dot(direction, default_direction)), 1.0, atol=1e-6):
+                rotation_quat = Quat()
+            else:
+                # Výpočet křížového produktu dává osu rotace
+                axis = np.cross(default_direction, direction)
+                axis = axis / np.linalg.norm(axis)
+                
+                # Úhel mezi vektory
+                angle = np.arccos(np.dot(default_direction, direction))
+                
+                # Vytvoření quaternionu pro tuto rotaci
+                rotation_quat = Quat()
+                rotation_quat.setFromAxisAngle(angle, Vec3(*axis))
+            
+            # Vytvoření cylindru pro větev
+            branch_radius = branch['radius'] * (1.0 - 0.1 * random.random())  # Malá náhodnost
+            
+            # Úprava parametrů větve podle typu stromu
+            if self.tree_type == "pine" and branch['depth'] > 0:
+                # Jehličnan - tenčí a tmavší větve
+                branch_radius *= 0.8
+            elif self.tree_type == "oak" and branch['depth'] > 0:
+                # Dub - silnější větve
+                branch_radius *= 1.1
+            elif self.tree_type == "palm" and branch['depth'] == 0:
+                # Palma - silnější kmen
+                branch_radius *= 1.3
+            
+            # Vytvoření entity větve
+            branch_entity = Entity(
+                parent=root_entity,
+                model='cylinder',
+                color=branch_color,
+                position=Vec3(*segment_center),
+                scale=(branch_radius*2, segment_length, branch_radius*2),
+                rotation=rotation_quat
+            )
+            
+            # Pro listnaté stromy a keře přidáme listy na koncích větví
+            if (self.tree_type in ["oak", "bush", "willow"] and 
+                branch['depth'] > 0 and 
+                i % 3 == 0):  # Jen na některých větvích
+                self._add_leaves(root_entity, segment_end, branch['depth'])
+                
+            # Pro jehličnany přidáme jehličí
+            if self.tree_type == "pine" and branch['depth'] > 0:
+                if i % 2 == 0:  # Jen na některých větvích
+                    self._add_pine_needles(root_entity, segment_end, branch['depth'])
         
-        return np.array(vertices, dtype='f4'), np.array(normals, dtype='f4'), np.array(indices, dtype='i4')
-
-    def _add_leaves(self, segments):
-        """Add leaves based on tree type"""
-        vertices = []
-        normals = []
-        indices = []
+        # Pro palmy přidáme na konec kmene palmové listy
+        if self.tree_type == "palm":
+            # Najdeme konec kmene
+            for branch in self.branches:
+                if branch['depth'] == 0:  # Hlavní kmen
+                    self._add_palm_leaves(root_entity, branch['end'])
         
-        # Only add leaves at branch ends based on tree type
+        return root_entity
+    
+    def _get_branch_color(self, depth_factor, base_color):
+        """
+        Získá barvu větve podle hloubky v stromu
+        
+        Parametry:
+        - depth_factor: faktor hloubky (0-1)
+        - base_color: základní barva 
+        
+        Vrací:
+        - barva pro danou větev
+        """
         if self.tree_type == "pine":
-            self._add_pine_needles(segments, vertices, normals, indices)
+            # Pro jehličnany - tmavý kmen, světlejší větvičky
+            trunk_color = color.rgb(60, 30, 15)  # Tmavě hnědá
+            leaf_color = base_color
+            
+            # Lineární interpolace mezi barvami
+            r = trunk_color[0] * (1-depth_factor) + leaf_color[0] * depth_factor
+            g = trunk_color[1] * (1-depth_factor) + leaf_color[1] * depth_factor
+            b = trunk_color[2] * (1-depth_factor) + leaf_color[2] * depth_factor
+            
+            return color.rgb(r, g, b)
         elif self.tree_type == "oak":
-            self._add_oak_leaves(segments, vertices, normals, indices)
-        elif self.tree_type == "bush":
-            self._add_bush_leaves(segments, vertices, normals, indices)
-        
-        return np.array(vertices, dtype='f4'), np.array(normals, dtype='f4'), np.array(indices, dtype='i4')
-
-    def _add_pine_needles(self, segments, vertices, normals, indices):
-        """Add needle-like leaves for pine trees"""
-        # For simplicity, we're just adding triangle clusters at branch ends
-        vertex_count = len(vertices) // 6
-        
-        # Get branch ends (positions that are only end points)
-        branch_ends = self._get_branch_ends(segments)
-        
-        for end_point, thickness in branch_ends:
-            # Skip very thick branches (likely the trunk)
-            if thickness > 0.5:
-                continue
-                
-            # Add clusters of needles around the branch end
-            needle_count = random.randint(3, 8)
-            for _ in range(needle_count):
-                # Random direction for the needle
-                needle_dir = np.array([
-                    random.uniform(-1.0, 1.0),
-                    random.uniform(0.3, 1.0),  # Mostly upward
-                    random.uniform(-1.0, 1.0)
-                ], dtype='f4')
-                needle_dir = needle_dir / np.linalg.norm(needle_dir)
-                
-                # Create a thin, long needle
-                needle_length = random.uniform(0.05, 0.15)
-                needle_width = random.uniform(0.01, 0.03)
-                
-                # Create a simple triangular needle
-                tip = end_point + needle_dir * needle_length
-                
-                # Calculate perpendicular vector for width
-                perp = self._perpendicular_vector(needle_dir)
-                perp = perp / np.linalg.norm(perp) * needle_width
-                
-                # Calculate vertices for the triangular needle
-                v1 = end_point + perp
-                v2 = end_point - perp
-                
-                # Add vertices with normals
-                normal = np.cross(perp, needle_dir)
-                normal = normal / np.linalg.norm(normal)
-                
-                # Add vertices
-                vertex_index = len(vertices) // 6
-                vertices.extend([tip[0], tip[1], tip[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v1[0], v1[1], v1[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v2[0], v2[1], v2[2], normal[0], normal[1], normal[2]])
-                
-                # Add indices for the triangle
-                indices.extend([vertex_index, vertex_index + 1, vertex_index + 2])
-
-    def _add_oak_leaves(self, segments, vertices, normals, indices):
-        """Add broader leaves for oak trees"""
-        # For simplicity, we're adding flat leaf-like quads at branch ends
-        branch_ends = self._get_branch_ends(segments)
-        
-        for end_point, thickness in branch_ends:
-            # Skip very thick branches (likely the trunk)
-            if thickness > 0.5:
-                continue
-                
-            # Add clusters of leaves around the branch end
-            leaf_count = random.randint(2, 5)
-            for _ in range(leaf_count):
-                # Random direction for the leaf
-                leaf_dir = np.array([
-                    random.uniform(-0.7, 0.7),
-                    random.uniform(0.3, 1.0),  # Mostly upward
-                    random.uniform(-0.7, 0.7)
-                ], dtype='f4')
-                leaf_dir = leaf_dir / np.linalg.norm(leaf_dir)
-                
-                # Create a broader leaf
-                leaf_length = random.uniform(0.07, 0.15)
-                leaf_width = random.uniform(0.05, 0.1)
-                
-                # Calculate leaf center
-                leaf_center = end_point + leaf_dir * (leaf_length * 0.5)
-                
-                # Calculate perpendicular vector for width
-                perp = self._perpendicular_vector(leaf_dir)
-                perp = perp / np.linalg.norm(perp) * leaf_width
-                
-                # Calculate quad vertices
-                v1 = leaf_center + perp - leaf_dir * (leaf_length * 0.5)
-                v2 = leaf_center - perp - leaf_dir * (leaf_length * 0.5)
-                v3 = leaf_center - perp + leaf_dir * (leaf_length * 0.5)
-                v4 = leaf_center + perp + leaf_dir * (leaf_length * 0.5)
-                
-                # Add vertices with normals
-                normal = np.cross(perp, leaf_dir)
-                normal = normal / np.linalg.norm(normal)
-                
-                # Add vertices
-                vertex_index = len(vertices) // 6
-                vertices.extend([v1[0], v1[1], v1[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v2[0], v2[1], v2[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v3[0], v3[1], v3[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v4[0], v4[1], v4[2], normal[0], normal[1], normal[2]])
-                
-                # Add indices for two triangles forming the quad
-                indices.extend([vertex_index, vertex_index + 1, vertex_index + 2])
-                indices.extend([vertex_index, vertex_index + 2, vertex_index + 3])
-
-    def _add_bush_leaves(self, segments, vertices, normals, indices):
-        """Add dense, small leaves for bushes"""
-        # Bushes have many small leaves densely packed
-        branch_ends = self._get_branch_ends(segments)
-        
-        for end_point, thickness in branch_ends:
-            # Bushes can have leaves on thicker branches too
-            if thickness > 0.8:
-                continue
-                
-            # Add clusters of leaves around the branch end
-            leaf_count = random.randint(4, 8)  # More leaves for bushes
-            for _ in range(leaf_count):
-                # Random direction for the leaf
-                leaf_dir = np.array([
-                    random.uniform(-1.0, 1.0),
-                    random.uniform(-0.2, 1.0),  # Can point slightly downward
-                    random.uniform(-1.0, 1.0)
-                ], dtype='f4')
-                leaf_dir = leaf_dir / np.linalg.norm(leaf_dir)
-                
-                # Create a small leaf
-                leaf_length = random.uniform(0.03, 0.08)
-                leaf_width = random.uniform(0.02, 0.05)
-                
-                # Calculate leaf center
-                leaf_center = end_point + leaf_dir * (leaf_length * 0.5)
-                
-                # Calculate perpendicular vector for width
-                perp = self._perpendicular_vector(leaf_dir)
-                perp = perp / np.linalg.norm(perp) * leaf_width
-                
-                # Calculate quad vertices
-                v1 = leaf_center + perp - leaf_dir * (leaf_length * 0.5)
-                v2 = leaf_center - perp - leaf_dir * (leaf_length * 0.5)
-                v3 = leaf_center - perp + leaf_dir * (leaf_length * 0.5)
-                v4 = leaf_center + perp + leaf_dir * (leaf_length * 0.5)
-                
-                # Add vertices with normals
-                normal = np.cross(perp, leaf_dir)
-                normal = normal / np.linalg.norm(normal)
-                
-                # Add vertices
-                vertex_index = len(vertices) // 6
-                vertices.extend([v1[0], v1[1], v1[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v2[0], v2[1], v2[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v3[0], v3[1], v3[2], normal[0], normal[1], normal[2]])
-                vertices.extend([v4[0], v4[1], v4[2], normal[0], normal[1], normal[2]])
-                
-                # Add indices for two triangles forming the quad
-                indices.extend([vertex_index, vertex_index + 1, vertex_index + 2])
-                indices.extend([vertex_index, vertex_index + 2, vertex_index + 3])
-
-    def _get_branch_ends(self, segments):
-        """Find branch end points by identifying endpoints that aren't start points"""
-        start_points = set()
-        end_points = []
-        
-        for start, end, thickness in segments:
-            start_tuple = tuple(start)
-            end_tuple = tuple(end)
-            start_points.add(start_tuple)
-            end_points.append((end_tuple, thickness))
-        
-        # Return only true end points
-        return [(np.array(end), thickness) for end, thickness in end_points 
-                if tuple(end) not in start_points]
-
-    def _perpendicular_vector(self, v):
-        """Find a perpendicular vector to the given vector"""
-        # We need any vector perpendicular to v
-        if abs(v[0]) < abs(v[1]):
-            if abs(v[0]) < abs(v[2]):
-                return np.array([1.0, 0.0, 0.0], dtype='f4')
-            else:
-                return np.array([0.0, 0.0, 1.0], dtype='f4')
+            # Pro duby - světlejší kmen
+            return color.rgb(90 - 20 * depth_factor, 
+                             50 + 20 * depth_factor, 
+                             30)
+        elif self.tree_type == "palm":
+            # Pro palmy - specifický odstín kmene
+            return color.rgb(120 - 30 * depth_factor, 
+                             90 - 20 * depth_factor, 
+                             60 - 10 * depth_factor)
         else:
-            if abs(v[1]) < abs(v[2]):
-                return np.array([0.0, 1.0, 0.0], dtype='f4')
-            else:
-                return np.array([0.0, 0.0, 1.0], dtype='f4')
+            # Výchozí barevné schéma
+            return color.rgb(76 - 30 * depth_factor, 
+                             51 + 40 * depth_factor, 
+                             25)
+    
+    def _add_leaves(self, parent, position, depth):
+        """
+        Přidá listy na konec větve
         
-    def set_growth(self, factor):
-        """Set the growth factor for animation (0.0 to 1.0)"""
-        self.growth_factor = max(0.0, min(1.0, factor))
+        Parametry:
+        - parent: rodičovská entita
+        - position: pozice konce větve
+        - depth: hloubka větvení
+        """
+        leaf_size = 0.3 - 0.05 * depth  # Menší listy na hlubších větvích
         
-    def get_growth_vertices(self):
-        """Get vertices with growth factor applied"""
-        if self.growth_factor >= 1.0:
-            return self.vertices, self.normals, self.indices
-            
-        # For simplicity, we'll just scale the y-coordinate based on growth factor
-        grown_vertices = self.vertices.copy()
+        # Základní barva listů podle typu stromu
+        if self.tree_type == "oak":
+            leaf_color = color.rgb(60, 128, 30)
+        elif self.tree_type == "willow":
+            leaf_color = color.rgb(150, 190, 60)
+        elif self.tree_type == "bush":
+            leaf_color = color.rgb(50, 180, 50)
+        else:
+            leaf_color = color.rgb(50, 150, 50)
         
-        # Scale y values (height)
-        for i in range(1, len(grown_vertices), 6):  # y is at index 1, 7, 13, etc.
-            original_y = self.vertices[i]
-            grown_vertices[i] = original_y * self.growth_factor
-            
-        return grown_vertices, self.normals, self.indices
-
-    def create_ground_plane(self, size=5.0, y_position=-0.01):
-        """Create a simple square ground plane"""
-        # Create a simple quad for the ground
-        vertices = np.array([
-            # Position (XYZ) + Normal (XYZ)
-            -size, y_position, -size, 0.0, 1.0, 0.0,
-             size, y_position, -size, 0.0, 1.0, 0.0,
-             size, y_position,  size, 0.0, 1.0, 0.0,
-            -size, y_position,  size, 0.0, 1.0, 0.0
-        ], dtype='f4')
+        # Přidání náhodnosti do barvy
+        r_var = random.uniform(-self.color_variance, self.color_variance)
+        g_var = random.uniform(-self.color_variance, self.color_variance)
+        leaf_color = color.rgb(
+            max(0, min(255, leaf_color[0] + r_var * 255)),
+            max(0, min(255, leaf_color[1] + g_var * 255)),
+            leaf_color[2]
+        )
         
-        # Two triangles for the quad
-        indices = np.array([0, 1, 2, 0, 2, 3], dtype='i4')
+        # Vytvoření entity listu
+        leaf = Entity(
+            parent=parent,
+            model='sphere',
+            color=leaf_color,
+            position=Vec3(*position),
+            scale=leaf_size
+        )
         
-        # Normals all point up
-        normals = np.array([
-            0.0, 1.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 1.0, 0.0,
-            0.0, 1.0, 0.0
-        ], dtype='f4')
+        # Pro některé typy přidáme více listů
+        if self.tree_type in ["oak", "bush"]:
+            # Přidáme 2-3 další listy blízko
+            for _ in range(random.randint(2, 3)):
+                offset = [random.uniform(-0.2, 0.2) for _ in range(3)]
+                
+                # Pro keře větší variabilita v barvě
+                if self.tree_type == "bush":
+                    r_var = random.uniform(-self.color_variance*2, self.color_variance*2)
+                    g_var = random.uniform(-self.color_variance*2, self.color_variance*2)
+                    leaf_color = color.rgb(
+                        max(0, min(255, leaf_color[0] + r_var * 255)),
+                        max(0, min(255, leaf_color[1] + g_var * 255)),
+                        leaf_color[2]
+                    )
+                
+                leaf = Entity(
+                    parent=parent,
+                    model='sphere',
+                    color=leaf_color,
+                    position=Vec3(*(position + offset)),
+                    scale=leaf_size * random.uniform(0.8, 1.2)
+                )
+    
+    def _add_pine_needles(self, parent, position, depth):
+        """
+        Přidá jehličí na konec větve
         
-        return vertices, normals, indices
+        Parametry:
+        - parent: rodičovská entita
+        - position: pozice konce větve
+        - depth: hloubka větvení
+        """
+        # Základní barva jehličí
+        needle_color = color.rgb(10, 80, 30)  # Tmavě zelená
+        
+        # Přidání náhodnosti do barvy
+        r_var = random.uniform(-self.color_variance, self.color_variance)
+        g_var = random.uniform(-self.color_variance, self.color_variance)
+        needle_color = color.rgb(
+            max(0, min(255, needle_color[0] + r_var * 255)),
+            max(0, min(255, needle_color[1] + g_var * 255)),
+            needle_color[2]
+        )
