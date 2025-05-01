@@ -1,149 +1,103 @@
+# main.py
 import glfw
-import moderngl
-import numpy as np
+from pyrr import Matrix44
+import math
 import random
-import sys
-import os
-import logging
 
-# Nastavení loggeru
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler(sys.stdout)
-    ]
-)
-
-logger = logging.getLogger('FractalForest')
-
-# Přidání cesty k modulům
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
-
-from generation.lsystem import LSystem
-from generation.tree import TreeType1, TreeType2
+# Importy z našich modulů
 from engine.renderer import Renderer
 from engine.camera import Camera
-
-class Application:
-    def __init__(self, width=800, height=600):
-        logger.info("Inicializace aplikace")
-        # Inicializace GLFW
-        if not glfw.init():
-            logger.error("Nelze inicializovat GLFW")
-            raise RuntimeError("Nelze inicializovat GLFW")
-
-        # Konfigurace GLFW
-        glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
-        glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
-        glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
-        glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
-        glfw.window_hint(glfw.SAMPLES, 4)  # Anti-aliasing
-
-        # Vytvoření okna
-        self.window = glfw.create_window(width, height, "L-System 3D Trees", None, None)
-        if not self.window:
-            logger.error("Nelze vytvořit GLFW okno")
-            glfw.terminate()
-            raise RuntimeError("Nelze vytvořit GLFW okno")
-
-        logger.info(f"Vytvořeno okno o rozměrech {width}x{height}")
-        
-        # Nastavení okna jako aktuálního OpenGL kontextu
-        glfw.make_context_current(self.window)
-        
-        # Nastavení callbacků
-        glfw.set_key_callback(self.window, self.key_callback)
-        glfw.set_framebuffer_size_callback(self.window, self.resize_callback)
-
-        # Inicializace ModernGL
-        self.ctx = moderngl.create_context()
-        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE | moderngl.BLEND)
-        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        logger.info("ModernGL kontext inicializován")
-
-        # Inicializace kamery
-        self.camera = Camera(width, height)
-        self.width, self.height = width, height
-        logger.info("Kamera inicializována")
-
-        # Definice dostupných typů stromů
-        self.tree_types = [TreeType1(), TreeType2()]
-        
-        # Renderer pro vykreslování
-        self.renderer = Renderer(self.ctx, self.camera)
-        logger.info("Renderer inicializován")
-        
-        # Generování L-systému a stromu
-        self.generate_tree()
-
-    def generate_tree(self):
-        # Náhodně vybere typ stromu
-        tree_type = random.choice(self.tree_types)
-        logger.info(f"Generuji strom typu: {tree_type.name}")
-        
-        # Vytvoří L-systém s vybraným typem
-        self.l_system = LSystem(tree_type)
-        
-        # Generuje řetězec L-systému
-        result = self.l_system.generate()
-        logger.debug(f"Vygenerovaný L-systém má délku {len(result)} znaků")
-        
-        try:
-            # Vytvoří geometrii stromu
-            vertices, indices = self.l_system.create_geometry()
-            logger.info(f"Vytvořena geometrie: {len(vertices)/7} vrcholů, {len(indices)} indexů")
-            
-            # Aktualizuje geometrii v rendereru
-            self.renderer.update_geometry(vertices, indices)
-            logger.info("Geometrie úspěšně aktualizována v rendereru")
-        except Exception as e:
-            logger.error(f"Chyba při vytváření geometrie: {e}")
-            raise
-
-    def key_callback(self, window, key, scancode, action, mods):
-        if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
-            logger.info("Ukončuji aplikaci (stisknuta klávesa ESC)")
-            glfw.set_window_should_close(window, True)
-        
-        # Generování nového stromu na stisk mezerníku
-        if key == glfw.KEY_SPACE and action == glfw.PRESS:
-            logger.info("Generování nového stromu (stisknuta mezerník)")
-            self.generate_tree()
-
-    def resize_callback(self, window, width, height):
-        self.width, self.height = width, height
-        self.ctx.viewport = (0, 0, width, height)
-        self.camera.set_projection(width, height)
-        logger.info(f"Změna velikosti okna na {width}x{height}")
-
-    def run(self):
-        logger.info("Spouštím hlavní smyčku aplikace")
-        # Hlavní smyčka aplikace
-        while not glfw.window_should_close(self.window):
-            # Vyčištění obrazovky
-            self.ctx.clear(0.2, 0.3, 0.3)
-            
-            # Vykreslení stromu
-            self.renderer.render()
-            
-            # Výměna bufferů a zpracování událostí
-            glfw.swap_buffers(self.window)
-            glfw.poll_events()
-
-        # Úklid
-        logger.info("Ukončuji aplikaci a provádím úklid")
-        self.renderer.cleanup()
-        glfw.terminate()
+from generation.tree import get_random_tree_type
 
 def main():
-    try:
-        logger.info("Spouštím aplikaci FractalForest")
-        app = Application()
-        app.run()
-    except Exception as e:
-        logger.error(f"Kritická chyba: {e}")
+    print("Initializing...")
+    # Vytvoření instance renderu (inicializuje okno a ModernGL)
+    renderer = Renderer(width=1024, height=768, title="Náhodný L-System Strom")
+
+    # Vytvoření instance kamery
+    camera = Camera(renderer.width, renderer.height)
+    # Můžeme kameru trochu posunout pro lepší výchozí pohled
+    camera.position.z = 4.0
+    camera.position.y = 0.5
+    camera.update_view_matrix()
+
+    print("Generating tree...")
+    # Získání náhodného typu stromu
+    tree_definition = get_random_tree_type()
+
+    # Získání L-systému pro tento typ
+    lsystem = tree_definition.get_lsystem()
+
+    # Generování řetězce L-systému
+    iterations = tree_definition.get_iterations()
+    lsystem.generate(iterations)
+    print(f"Generated L-system string with {iterations} iterations (length: {len(lsystem.current_string)})")
+
+    # Získání vrcholů a barev
+    vertices, colors = lsystem.get_vertices()
+
+    if vertices.size == 0:
+        print("Error: No vertices generated. Exiting.")
+        renderer.cleanup()
         glfw.terminate()
+        return
+
+    print(f"Generated {vertices.size // 3} vertices.")
+
+    # Předání geometrie rendereru k vytvoření VBO/VAO
+    renderer.setup_object(vertices, colors)
+
+    print("Starting main loop...")
+    # Hlavní smyčka
+    last_time = glfw.get_time()
+    angle_y = 0.0
+    angle_x = math.radians(10) # Mírný náklon na začátku
+
+    while not renderer.should_close():
+        current_time = glfw.get_time()
+        delta_time = current_time - last_time
+        last_time = current_time
+
+        # Pomalé otáčení stromu pro ukázku
+        angle_y += 0.3 * delta_time # Rychlost otáčení
+
+        # Výpočet modelové matice (otáčení)
+        model_matrix = Matrix44.from_y_rotation(angle_y) * Matrix44.from_x_rotation(angle_x)
+
+        # Vykreslení scény
+        renderer.render(camera, model_matrix)
+
+        # Výměna bufferů a zpracování událostí
+        renderer.swap_buffers()
+        renderer.poll_events()
+
+            
+        if glfw.get_key(renderer.window, glfw.KEY_ESCAPE) == glfw.PRESS:
+                glfw.set_window_should_close(renderer.window, True)
+
+        # Možnost znovu vygenerovat strom po stisku klávesy (např. R)
+        if glfw.get_key(renderer.window, glfw.KEY_SPACE) == glfw.PRESS:
+            print("\nRegenerating tree...")
+            tree_definition = get_random_tree_type()
+            lsystem = tree_definition.get_lsystem()
+            iterations = tree_definition.get_iterations()
+            lsystem.generate(iterations)
+            print(f"Generated L-system string with {iterations} iterations (length: {len(lsystem.current_string)})")
+            vertices, colors = lsystem.get_vertices()
+            if vertices.size > 0:
+                 renderer.setup_object(vertices, colors)
+                 print(f"Generated {vertices.size // 3} vertices.")
+            else:
+                 print("Error: No vertices generated during regeneration.")
+                 renderer.setup_object(np.array([]), np.array([])) # Vyčistí VAO
+
+    print("Cleaning up...")
+    # Úklid po skončení smyčky
+    renderer.cleanup()
+
+    # Ukončení GLFW
+    glfw.terminate()
+    print("Exited cleanly.")
 
 if __name__ == "__main__":
     main()

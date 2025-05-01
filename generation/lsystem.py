@@ -1,223 +1,145 @@
-import numpy as np
-import random
+# generation/lsystem.py
 import math
-import logging
-from typing import List, Tuple, Dict
-
-# Nastavení loggeru
-logger = logging.getLogger('FractalForest.LSystem')
+import random
+import numpy as np
 
 class LSystem:
-    def __init__(self, tree_definition):
-        self.axiom = tree_definition.axiom
-        self.rules = tree_definition.rules
-        self.iterations = tree_definition.iterations
-        self.angle = tree_definition.angle
-        self.thickness_ratio = tree_definition.thickness_ratio
-        self.length_ratio = tree_definition.length_ratio
-        self.random_angle_variation = tree_definition.random_angle_variation
-        self.random_length_variation = tree_definition.random_length_variation
-        self.current_string = self.axiom
-        self.color = tree_definition.color
-        
-        # Základní délka segmentu
-        self.base_length = tree_definition.base_length
-        # Základní tloušťka segmentu
-        self.base_thickness = tree_definition.base_thickness
-        
-        # Výsledná geometrie
-        self.vertices = []
-        self.indices = []
-        
-        logger.info(f"Vytvořen L-systém s axiomem: {self.axiom}, počet iterací: {self.iterations}")
+    """Třída pro implementaci L-systému a generování geometrie."""
+    def __init__(self, axiom, rules, angle, scale, initial_length=0.1, initial_width=0.03):
+        self.axiom = axiom
+        self.rules = rules
+        # Přidání malé náhodnosti k úhlu a škále pro variabilitu
+        self.angle = angle + random.uniform(-math.radians(3), math.radians(3))
+        self.scale = scale * random.uniform(0.95, 1.05)
+        self.initial_length = initial_length
+        self.initial_width = initial_width
+        self.current_string = axiom
+        self.iterations = 0 # Přidáno pro sledování iterací
 
-    def generate(self):
-        """Generuje řetězec L-systému na základě pravidel"""
-        logger.info("Začínám generovat L-systém")
-        result = self.axiom
-        
-        for i in range(self.iterations):
-            next_result = ""
-            for char in result:
-                if char in self.rules:
-                    # Přidáme náhodné variace do pravidel pro větší rozmanitost
-                    if isinstance(self.rules[char], list):
-                        # Pokud máme více možných pravidel pro symbol, vybereme náhodně jedno
-                        replacement = random.choice(self.rules[char])
-                    else:
-                        replacement = self.rules[char]
-                    next_result += replacement
+    def generate(self, iterations):
+        """Generuje řetězec L-systému po zadaný počet iterací."""
+        self.iterations = iterations
+        current = self.axiom
+        for _ in range(iterations):
+            next_gen = ""
+            for char in current:
+                # Stochastické pravidlo - možnost nahradit F i něčím jiným s malou pravděpodobností
+                if char == 'F' and random.random() < 0.02: # Malá šance na změnu
+                    next_gen += random.choice(["F", "FF", "F[+F]F[-F]F"]) # Příklad variace
+                elif char in self.rules:
+                    next_gen += self.rules[char]
                 else:
-                    next_result += char
-            result = next_result
-            logger.debug(f"Iterace {i+1}, délka řetězce: {len(result)}")
-        
-        self.current_string = result
-        logger.info(f"L-systém vygenerován, konečná délka: {len(result)}")
-        return result
+                    next_gen += char
+            current = next_gen
+        self.current_string = current
+        return current
 
-    def create_geometry(self) -> Tuple[np.ndarray, np.ndarray]:
-        """Vytvoří 3D geometrii stromu na základě vygenerovaného řetězce L-systému"""
-        logger.info("Začínám vytvářet geometrii stromu")
-        # Reset geometrie
-        self.vertices = []
-        self.indices = []
-        
-        # Zásobník stavů pro větvení
+    def get_vertices(self):
+        """Převádí vygenerovaný řetězec na posloupnost vrcholů a barev pro vykreslení."""
+        vertices = []
+        colors = []
+
         stack = []
-        
-        # Aktuální pozice, směr, délka a tloušťka
-        position = np.array([0.0, 0.0, 0.0])
-        direction = np.array([0.0, 1.0, 0.0])  # Začínáme růst nahoru (y+)
-        length = self.base_length
-        thickness = self.base_thickness
-        
-        # Pomocné vektory pro orientaci segmentů
-        up = np.array([0.0, 1.0, 0.0])
-        
-        # Index pro vrcholy
-        vertex_index = 0
-        segment_count = 0
-        
-        # Interpretace řetězce L-systému
+        position = np.array([0.0, -0.8, 0.0], dtype='f4') # Začátek kmene
+        direction = np.array([0.0, 1.0, 0.0], dtype='f4') # Směr nahoru
+        # Délka se může lišit v závislosti na iteracích a scale
+        branch_length = self.initial_length * (self.scale ** (self.iterations / 2)) # Upravená délka
+        branch_width = self.initial_width # Šířka se může také měnit, ale pro jednoduchost necháme
+
+        # Barvy
+        trunk_color = np.array([0.55, 0.27, 0.07], dtype='f4') # Hnědá
+        leaf_color = np.array([0.0, random.uniform(0.6, 0.9), 0.0], dtype='f4') # Mírně náhodná zelená
+
         for char in self.current_string:
-            if char == 'F':  # Posun a vytvoření segmentu
-                # Náhodná variace délky
-                current_length = length * (1.0 + random.uniform(-self.random_length_variation, self.random_length_variation))
-                
-                # Koncový bod segmentu
-                new_position = position + direction * current_length
-                
-                # Vytvoření válce (zjednodušeně jako 8-boký hranol)
-                self._create_cylinder_segment(position, new_position, thickness, self.color, vertex_index)
-                vertex_index += 16  # 8 vrcholů nahoře + 8 vrcholů dole
-                segment_count += 1
-                
-                # Aktualizace pozice
-                position = new_position
-                
-                # Zmenšení tloušťky a délky pro další segment
-                thickness *= self.thickness_ratio
-                length *= self.length_ratio
-                
-            elif char == '+':  # Rotace doprava kolem osy Z
-                angle_rad = math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-                self._rotate_direction(direction, up, angle_rad)
-                
-            elif char == '-':  # Rotace doleva kolem osy Z
-                angle_rad = -math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-                self._rotate_direction(direction, up, angle_rad)
-                
-            elif char == '&':  # Rotace dolů kolem osy X
-                angle_rad = math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-                right = np.cross(direction, up)
-                right = right / np.linalg.norm(right) if np.linalg.norm(right) > 0 else np.array([1.0, 0.0, 0.0])
-                self._rotate_direction(direction, right, angle_rad)
-                up = np.cross(right, direction)
-                up = up / np.linalg.norm(up)
-                
-            elif char == '^':  # Rotace nahoru kolem osy X
-                angle_rad = -math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-                right = np.cross(direction, up)
-                right = right / np.linalg.norm(right) if np.linalg.norm(right) > 0 else np.array([1.0, 0.0, 0.0])
-                self._rotate_direction(direction, right, angle_rad)
-                up = np.cross(right, direction)
-                up = up / np.linalg.norm(up)
-                
-            elif char == '\\':  # Rotace doprava kolem osy Y
-                angle_rad = math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-                self._rotate_direction(up, direction, angle_rad)
-                
-            elif char == '/':  # Rotace doleva kolem osy Y
-                angle_rad = -math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-                self._rotate_direction(up, direction, angle_rad)
-                
-            elif char == '[':  # Uložení stavu na zásobník
-                stack.append((position.copy(), direction.copy(), up.copy(), length, thickness))
-                
-            elif char == ']':  # Obnovení stavu ze zásobníku
-                if stack:
-                    position, direction, up, length, thickness = stack.pop()
-        
-        logger.info(f"Vytvořeno {segment_count} segmentů stromu")
-        
-        # Převedení seznamů na numpy pole pro ModernGL
-        vertices_array = np.array(self.vertices, dtype=np.float32)
-        indices_array = np.array(self.indices, dtype=np.uint32)
-        
-        logger.info(f"Finální geometrie: {len(vertices_array)} vrcholů, {len(indices_array)} indexů")
-        return vertices_array, indices_array
+            if char == 'F': # Kresli vpřed
+                start = position.copy()
+                end = position + direction * branch_length
 
-    def _rotate_direction(self, vector, axis, angle):
-        """Rotace vektoru kolem osy o daný úhel (v radiánech)"""
-        # Normalizace osy rotace
-        axis = axis / np.linalg.norm(axis) if np.linalg.norm(axis) > 0 else axis
-        
-        # Kosinová složka
-        cos_angle = math.cos(angle)
-        # Sinová složka
-        sin_angle = math.sin(angle)
-        
-        # Rodriguesův vzorec pro rotaci vektoru
-        rotated = vector * cos_angle + np.cross(axis, vector) * sin_angle + axis * np.dot(axis, vector) * (1 - cos_angle)
-        
-        # Aktualizace původního vektoru
-        vector[:] = rotated / np.linalg.norm(rotated)
+                # Jednoduchá čára pro segment
+                vertices.extend(start)
+                vertices.extend(end)
+                colors.extend(trunk_color)
+                colors.extend(trunk_color)
 
-    def _create_cylinder_segment(self, start, end, radius, color, vertex_offset):
-        """Vytvoří válcový segment mezi dvěma body"""
-        # Směrový vektor
-        direction = end - start
-        height = np.linalg.norm(direction)
-        if height < 1e-6:
-            logger.warning("Příliš krátký segment, přeskakuji")
-            return  # Příliš krátký segment, přeskočíme
-            
-        direction = direction / height
-        
-        # Vytvoření kolmého vektoru na směr
-        perpendicular = np.array([1.0, 0.0, 0.0]) if abs(direction[1]) > 0.9 else np.array([0.0, 1.0, 0.0])
-        perpendicular = np.cross(perpendicular, direction)
-        perpendicular = perpendicular / np.linalg.norm(perpendicular)
-        
-        # Druhý kolmý vektor pro kompletní souřadnicový systém
-        perpendicular2 = np.cross(direction, perpendicular)
-        
-        # Počet segmentů válce po obvodu
-        segments = 8
-        
-        # Vrcholy pro spodní a horní základnu válce
-        for i in range(segments):
-            angle = 2.0 * math.pi * i / segments
-            dx = math.cos(angle)
-            dy = math.sin(angle)
-            
-            # Spodní základna
-            point = start + radius * (perpendicular * dx + perpendicular2 * dy)
-            # OPRAVA: Přidáme plnou barvu RGBA (4 komponenty)
-            # Původní: self.vertices.extend([point[0], point[1], point[2], color[0], color[1], color[2], color[3]])
-            self.vertices.extend([point[0], point[1], point[2], color[0], color[1], color[2], color[3]])
-            
-            # Horní základna
-            point = end + radius * (perpendicular * dx + perpendicular2 * dy)
-            # OPRAVA: Přidáme plnou barvu RGBA (4 komponenty)
-            self.vertices.extend([point[0], point[1], point[2], color[0], color[1], color[2], color[3]])
-        
-        # Indexy pro vykreslení trojúhelníků
-        for i in range(segments):
-            i0 = vertex_offset + i * 2
-            i1 = vertex_offset + ((i + 1) % segments) * 2
-            i2 = vertex_offset + i * 2 + 1
-            i3 = vertex_offset + ((i + 1) % segments) * 2 + 1
-            
-            # Trojúhelníky pro plášť válce
-            self.indices.extend([i0, i1, i2])
-            self.indices.extend([i1, i3, i2])
-            
-            # Trojúhelníky pro spodní základnu
-            if i < segments - 2:
-                self.indices.extend([vertex_offset, vertex_offset + (i + 1) * 2, vertex_offset + (i + 2) * 2])
-            
-            # Trojúhelníky pro horní základnu
-            if i < segments - 2:
-                self.indices.extend([vertex_offset + 1, vertex_offset + (i + 2) * 2 + 1, vertex_offset + (i + 1) * 2 + 1])
+                position = end # Aktualizace pozice
+
+            elif char == '+': # Otoč doleva (kolem Y)
+                direction = self._rotate_y(direction, self.angle)
+            elif char == '-': # Otoč doprava (kolem Y)
+                direction = self._rotate_y(direction, -self.angle)
+            elif char == '&': # Otoč dolů (kolem X)
+                direction = self._rotate_x(direction, self.angle)
+            elif char == '^': # Otoč nahoru (kolem X)
+                direction = self._rotate_x(direction, -self.angle)
+            elif char == '\\': # Otoč doprava (kolem Z)
+                direction = self._rotate_z(direction, self.angle)
+            elif char == '/': # Otoč doleva (kolem Z)
+                direction = self._rotate_z(direction, -self.angle)
+
+            elif char == '[': # Ulož stav
+                # Při větvení zmenšíme délku
+                stack.append((position.copy(), direction.copy(), branch_length))
+                branch_length *= self.scale
+            elif char == ']': # Obnov stav
+                if stack: # Zajistíme, že stack není prázdný
+                    position, direction, branch_length = stack.pop()
+                else:
+                    print("Warning: Trying to pop from an empty stack.") # Debugging
+
+            elif char == 'X': # X reprezentuje list nebo koncový bod
+                # Můžeme zde přidat geometrii listu, pro jednoduchost necháme jako koncový bod
+                # Nebo přidáme krátký zelený segment jako náznak listu
+                 start = position.copy()
+                 leaf_size = branch_length * 0.5 # Velikost "listu"
+                 # Náhodný směr pro list
+                 leaf_dir = direction + np.random.uniform(-0.3, 0.3, 3)
+                 norm = np.linalg.norm(leaf_dir)
+                 if norm > 1e-6: # Zabráníme dělení nulou
+                    leaf_dir /= norm
+                 else:
+                     leaf_dir = direction # Fallback
+
+                 end = position + leaf_dir * leaf_size
+
+                 vertices.extend(start)
+                 vertices.extend(end)
+                 colors.extend(trunk_color) # Konec větve je ještě hnědý
+                 colors.extend(leaf_color) # "List" je zelený
+
+        if not vertices: # Pokud by se nic nevygenerovalo
+             return np.array([], dtype='f4'), np.array([], dtype='f4')
+
+        return np.array(vertices, dtype='f4').flatten(), np.array(colors, dtype='f4').flatten()
+
+    def _rotate_y(self, direction, angle):
+        """Rotace vektoru kolem osy Y."""
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        rotation_matrix = np.array([
+            [cos_a, 0, sin_a],
+            [0, 1, 0],
+            [-sin_a, 0, cos_a]
+        ], dtype='f4')
+        return np.dot(rotation_matrix, direction)
+
+    def _rotate_x(self, direction, angle):
+        """Rotace vektoru kolem osy X."""
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        rotation_matrix = np.array([
+            [1, 0, 0],
+            [0, cos_a, -sin_a],
+            [0, sin_a, cos_a]
+        ], dtype='f4')
+        return np.dot(rotation_matrix, direction)
+
+    def _rotate_z(self, direction, angle):
+        """Rotace vektoru kolem osy Z."""
+        cos_a = math.cos(angle)
+        sin_a = math.sin(angle)
+        rotation_matrix = np.array([
+            [cos_a, -sin_a, 0],
+            [sin_a, cos_a, 0],
+            [0, 0, 1]
+        ], dtype='f4')
+        return np.dot(rotation_matrix, direction)

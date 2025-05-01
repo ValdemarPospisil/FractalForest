@@ -1,148 +1,136 @@
+# engine/renderer.py
 import moderngl
+import glfw
 import numpy as np
-import logging
-import os
+from .camera import Camera # Relativní import kamery
 
-# Nastavení loggeru
-logger = logging.getLogger('FractalForest.Renderer')
+VERTEX_SHADER = """
+#version 330
+in vec3 in_position;
+in vec3 in_color;
+
+out vec3 v_color; // Přeposíláme barvu do fragment shaderu
+
+uniform mat4 projection;
+uniform mat4 view;
+uniform mat4 model;
+
+void main() {
+    gl_Position = projection * view * model * vec4(in_position, 1.0);
+    v_color = in_color;
+}
+"""
+
+FRAGMENT_SHADER = """
+#version 330
+in vec3 v_color; // Přijímáme barvu z vertex shaderu
+out vec4 fragColor;
+
+void main() {
+    fragColor = vec4(v_color, 1.0);
+}
+"""
 
 class Renderer:
-    def __init__(self, ctx, camera):
-        self.ctx = ctx
-        self.camera = camera
-        
-        logger.info("Inicializace rendereru")
-        
-        # Vertex a fragment shadery
-        self.shader_program = self._create_shader_program()
-        
-        # Vytvoření prázdného VAO a VBO
+    """Třída pro správu vykreslování pomocí ModernGL."""
+    def __init__(self, width=800, height=600, title="L-System Tree Generator"):
+        self.width = width
+        self.height = height
+        self.window = self._initialize_window(title)
+        self.ctx = moderngl.create_context()
+
+        self.program = self.ctx.program(
+            vertex_shader=VERTEX_SHADER,
+            fragment_shader=FRAGMENT_SHADER
+        )
+
+        self.vbo_vertices = None
+        self.vbo_colors = None
         self.vao = None
-        self.vbo = None
-        self.ibo = None
-        self.vertex_count = 0
-        
-    def _create_shader_program(self):
-        """Vytvoření shader programu pro vykreslování stromů"""
-        logger.info("Vytváření shader programu")
-        
-        # Načtení shaderů ze souborů
-        shader_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'shaders')
-        
-        try:
-            # Zajištění, že adresář pro shadery existuje
-            os.makedirs(shader_dir, exist_ok=True)
-            
-            # Cesty k souborům shaderů
-            vertex_shader_path = os.path.join(shader_dir, 'vertex.glsl')
-            fragment_shader_path = os.path.join(shader_dir, 'fragment.glsl')
-            
-            # Načtení obsahu shaderů
-            with open(vertex_shader_path, 'r') as f:
-                vertex_shader = f.read()
-                
-            with open(fragment_shader_path, 'r') as f:
-                fragment_shader = f.read()
-            
-            program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
-            logger.info("Shader program úspěšně vytvořen")
-            return program
-        except Exception as e:
-            logger.error(f"Chyba při vytváření shader programu: {e}")
-            logger.info("Použití záložního shader programu")
-        try:
-            program = self.ctx.program(vertex_shader=vertex_shader, fragment_shader=fragment_shader)
-            logger.info("Záložní shader program úspěšně vytvořen")
-            return program
-        except Exception as e:
-            logger.error(f"Kritická chyba při vytváření záložního shader programu: {e}")
-            raise
-    
-    def update_geometry(self, vertices, indices):
-        """Aktualizuje geometrii stromu"""
-        logger.info(f"Aktualizace geometrie: {len(vertices)/7} vrcholů, {len(indices)} indexů")
-        
-        # Kontrola dat před vytvořením bufferů
-        if len(vertices) == 0 or len(indices) == 0:
-            logger.warning("Prázdná geometrie - žádné vrcholy nebo indexy")
-            return
-            
-        try:
-            # Logování struktury vertexů pro debugování
-            if isinstance(vertices, np.ndarray):
-                logger.debug(f"Tvar vertex pole: {vertices.shape}")
-            else:
-                logger.debug(f"Typ vertices není numpy array: {type(vertices)}")
-                vertices = np.array(vertices, dtype=np.float32)
-                
-            vertex_size = 7  # 3 pozice + 4 barva
-            if len(vertices) % vertex_size != 0:
-                logger.error(f"Nesprávný formát vertexů: {len(vertices)} hodnot není dělitelných {vertex_size}")
-                
-            # Vyčištění předchozích bufferů, pokud existují
-            if self.vbo:
-                self.vbo.release()
-            if self.ibo:
-                self.ibo.release()
-            if self.vao:
-                self.vao.release()
-            
-            # Vytvoření nových bufferů
-            self.vbo = self.ctx.buffer(vertices.astype('f4').tobytes())
-            self.ibo = self.ctx.buffer(indices.astype('u4').tobytes())
-            
-            # Vytvoření VAO
-            self.vao = self.ctx.vertex_array(
-                self.shader_program,
-                [
-                    (self.vbo, '3f 4f', 'in_position', 'in_color')
-                ],
-                self.ibo
-            )
-            
-            # Nastavení počtu vrcholů
-            self.vertex_count = len(indices)
-            logger.info(f"Geometrie úspěšně aktualizována, počet indexů: {self.vertex_count}")
-            
-        except Exception as e:
-            logger.error(f"Chyba při aktualizaci geometrie: {e}")
-            logger.debug(f"První 5 vrcholů: {vertices[:35] if len(vertices) >= 35 else vertices}")
-            raise
-    
-    def render(self):
-        """Vykreslí strom"""
-        if not self.vao or self.vertex_count == 0:
-            return
-        
-        try:
-            # Nastavení uniformních proměnných pro shadery
-            # Oprava: Zajištění správného formátu matic pomocí flatten()
-            model_matrix = np.identity(4, dtype=np.float32).flatten()
-            view_matrix = self.camera.get_view_matrix().astype(np.float32).flatten()
-            projection_matrix = self.camera.get_projection_matrix().astype(np.float32).flatten()
-            
-            # Nastavení uniformních proměnných
-            self.shader_program['model'].write(model_matrix)
-            self.shader_program['view'].write(view_matrix)
-            self.shader_program['projection'].write(projection_matrix)
-            
-            # Vykreslení stromu
-            self.vao.render(moderngl.TRIANGLES)
-        except Exception as e:
-            logger.error(f"Chyba při vykreslování: {e}")
-            # Více informací o chybě
-            logger.debug(f"Model matrix typ: {type(model_matrix)}, tvar: {model_matrix.shape}")
-            logger.debug(f"View matrix typ: {type(view_matrix)}, tvar: {view_matrix.shape}")
-            logger.debug(f"Projection matrix typ: {type(projection_matrix)}, tvar: {projection_matrix.shape}")
-    
+
+        # Nastavení počátečních OpenGL stavů
+        self.ctx.enable(moderngl.DEPTH_TEST)
+        # Můžeme zapnout i blendování, pokud budeme mít průhlednost
+        # self.ctx.enable(moderngl.BLEND)
+        # self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        self.ctx.line_width = 2.0 # Mírně tlustší čáry pro lepší viditelnost
+
+    def _initialize_window(self, title):
+        """Inicializuje GLFW okno."""
+        if not glfw.init():
+            raise RuntimeError("Nelze inicializovat GLFW")
+
+        glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
+        glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
+        glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
+        #glfw.window_hint(glfw.SAMPLES, 4) # Antialiasing (volitelné)
+
+
+        window = glfw.create_window(self.width, self.height, title, None, None)
+        if not window:
+            glfw.terminate()
+            raise RuntimeError("Nelze vytvořit GLFW okno")
+
+        glfw.make_context_current(window)
+        #glfw.swap_interval(1) # VSync (volitelné)
+        return window
+
+    def setup_object(self, vertices, colors):
+        """Vytvoří VBO a VAO pro objekt."""
+        # Uvolní staré buffery, pokud existují
+        if self.vbo_vertices: self.vbo_vertices.release()
+        if self.vbo_colors: self.vbo_colors.release()
+        if self.vao: self.vao.release()
+
+        if len(vertices) == 0 or len(colors) == 0:
+             print("Warning: No vertices or colors to set up.")
+             self.vao = None # Zajistíme, že se nepokusíme vykreslit prázdné VAO
+             return
+
+        self.vbo_vertices = self.ctx.buffer(vertices.tobytes())
+        self.vbo_colors = self.ctx.buffer(colors.tobytes())
+
+        vao_content = [
+            (self.vbo_vertices, '3f', 'in_position'),
+            (self.vbo_colors, '3f', 'in_color')
+        ]
+        self.vao = self.ctx.vertex_array(self.program, vao_content)
+
+    def render(self, camera: Camera, model_matrix):
+        """Vykreslí scénu."""
+        self.ctx.clear(0.9, 0.95, 1.0) # Světle modrá obloha
+
+        if not self.vao:
+            #print("Skipping render: VAO not available.")
+            return # Nic k vykreslení
+
+        # Aktualizace uniformů
+        self.program['projection'].write(camera.get_projection_matrix_bytes())
+        self.program['view'].write(camera.get_view_matrix_bytes())
+        self.program['model'].write(model_matrix.astype('f4').tobytes())
+
+        # Vykreslení
+        self.vao.render(moderngl.LINES) # Vykreslujeme čáry
+
     def cleanup(self):
-        """Uvolnění OpenGL zdrojů"""
-        logger.info("Úklid OpenGL zdrojů")
-        if self.vbo:
-            self.vbo.release()
-        if self.ibo:
-            self.ibo.release()
-        if self.vao:
-            self.vao.release()
-        if self.shader_program:
-            self.shader_program.release()
+        """Uvolní OpenGL zdroje."""
+        if self.vbo_vertices: self.vbo_vertices.release()
+        if self.vbo_colors: self.vbo_colors.release()
+        if self.vao: self.vao.release()
+        if self.program: self.program.release()
+        # Kontext se uvolní automaticky při ukončení programu,
+        # ale explicitní uvolnění není na škodu, pokud by se renderer používal déle.
+        # self.ctx.release()
+
+    def should_close(self):
+        """Zkontroluje, zda má být okno zavřeno."""
+        return glfw.window_should_close(self.window)
+
+    def swap_buffers(self):
+        """Vymění buffery okna."""
+        glfw.swap_buffers(self.window)
+
+    def poll_events(self):
+        """Zpracuje události okna."""
+        glfw.poll_events()
