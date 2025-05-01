@@ -1,146 +1,119 @@
-from ursina import *
+#!/usr/bin/env python3
+# -*- coding: utf-8 -*-
+
+import glfw
+import moderngl
+import numpy as np
 import random
-import logging
+import sys
+import os
+
+# Přidání cesty k modulům
+sys.path.append(os.path.dirname(os.path.abspath(__file__)))
+
 from generation.lsystem import LSystem
-from generation.tree import Tree
+from generation.tree import TreeType1, TreeType2
+from engine.renderer import Renderer
+from engine.camera import Camera
 
-# Nastavení logování
-logging.basicConfig(
-    level=logging.DEBUG,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.FileHandler("fractalforest.log"),
-        logging.StreamHandler()
-    ]
-)
-logger = logging.getLogger(__name__)
+class Application:
+    def __init__(self, width=800, height=600):
+        # Inicializace GLFW
+        if not glfw.init():
+            raise RuntimeError("Nelze inicializovat GLFW")
 
-# Dostupné typy stromů
-TREE_TYPES = ["pine", "oak", "bush", "willow", "palm"]
+        # Konfigurace GLFW
+        glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
+        glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
+        glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
+        glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
+        glfw.window_hint(glfw.SAMPLES, 4)  # Anti-aliasing
 
-class FractalForestApp(Ursina):
-    def __init__(self):
-        super().__init__()
+        # Vytvoření okna
+        self.window = glfw.create_window(width, height, "L-System 3D Trees", None, None)
+        if not self.window:
+            glfw.terminate()
+            raise RuntimeError("Nelze vytvořit GLFW okno")
+
+        # Nastavení okna jako aktuálního OpenGL kontextu
+        glfw.make_context_current(self.window)
         
-        # Nastavení okna
-        window.title = 'FractalForest'
-        window.borderless = False
-        window.exit_button.visible = False
+        # Nastavení callbacků
+        glfw.set_key_callback(self.window, self.key_callback)
+        glfw.set_framebuffer_size_callback(self.window, self.resize_callback)
+
+        # Inicializace ModernGL
+        self.ctx = moderngl.create_context()
+        self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE | moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+
+        # Inicializace kamery
+        self.camera = Camera(width, height)
+        self.width, self.height = width, height
+
+        # Definice dostupných typů stromů
+        self.tree_types = [TreeType1(), TreeType2()]
         
-        # Vytvoření scény
-        self.setup_scene()
+        # Renderer pro vykreslování
+        self.renderer = Renderer(self.ctx, self.camera)
         
-        # Vytvoření UI
-        self.setup_ui()
-        
-        # Generování prvního stromu
-        self.generate_random_tree()
-        
-    def setup_scene(self):
-        """Nastavení 3D scény"""
-        # Kamera
-        self.camera = EditorCamera()
-        self.camera.position = (5, 8, 8)
-        self.camera.look_at(Vec3(0, 1.5, 0))
-        
-        # Základní podložka (zem)
-        self.ground = Entity(
-            model='plane',
-            scale=(50, 1, 50),
-            color=color.rgb(76, 51, 25),  # hnědá barva
-            texture='white_cube',
-            texture_scale=(50, 50),
-            collider='box'
-        )
-        
-        # Osvětlení
-        self.directional_light = DirectionalLight()
-        self.directional_light.look_at(Vec3(-0.5, -1, -0.5))
-        
-        # Text s instrukcemi
-        self.instruction_text = Text(
-            text="G - nový strom | ESC - konec | WASD + myš - pohyb",
-            origin=(0, 0),
-            position=(-0.85, 0.47)
-        )
-        
-    def setup_ui(self):
-        """Nastavení uživatelského rozhraní"""
-        # Panel s informacemi
-        self.info_panel = WindowPanel(
-            title='Info',
-            content=(
-                Text('Vytvořeno pomocí Ursina Engine'),
-                Button(text='Nový strom', color=color.azure, on_click=self.generate_random_tree),
-                Text('', name='tree_type'),
-                Text('', name='tree_height'),
-                Text('', name='branch_count'),
-            ),
-            position=window.top_right - Vec2(0.35, 0.05),
-            scale=(0.3, 0.4)
-        )
-        
-    def update(self):
-        """Aktualizace při každém snímku"""
-        # Ukončení aplikace po stisknutí ESC
-        if held_keys['escape']:
-            application.quit()
-        
-        # Generování nového stromu po stisknutí G
-        if held_keys['g']:
-            held_keys['g'] = False  # Reset klávesy aby nedošlo k vícenásobnému volání
-            self.generate_random_tree()
-    
-    def generate_random_tree(self):
-        """Generování náhodného stromu z dostupných typů"""
-        # Odstranění předchozího stromu, pokud existuje
-        if hasattr(self, 'tree_entity') and self.tree_entity:
-            destroy(self.tree_entity)
-            
-        # Výběr náhodného typu stromu
-        tree_type = random.choice(TREE_TYPES)
-        logger.info(f"Generování nového stromu typu: {tree_type}")
-        
-        # Nastavení specifických parametrů podle typu stromu
-        if tree_type == "pine":
-            iterations = 4
-            angle = 22.5
-            length = 1.0
-            color = color.rgb(25, 102, 25)  # tmavě zelená
-        elif tree_type == "oak":
-            iterations = 4
-            angle = 25.0
-            length = 1.2
-            color = color.rgb(76, 128, 51)  # středně zelená
-        elif tree_type == "bush":
-            iterations = 3
-            angle = 28.0
-            length = 0.8
-            color = color.rgb(102, 153, 76)  # světle zelená
-        elif tree_type == "willow":
-            iterations = 4
-            angle = 15.0
-            length = 1.3
-            color = color.rgb(76, 153, 76)  # žluto-zelená
-        elif tree_type == "palm":
-            iterations = 3
-            angle = 25.0
-            length = 1.5
-            color = color.rgb(51, 128, 51)  # zelená
-            
         # Generování L-systému a stromu
-        lsystem = LSystem.create_tree_system(tree_type=tree_type, randomness=0.15)
-        instructions = lsystem.generate(iterations)
-        self.tree = Tree(instructions, angle=angle, length=length, tree_type=tree_type)
-        
-        # Vytvoření 3D entity stromu
-        self.tree_entity = self.tree.create_entity(color=color)
-        
-        # Aktualizace informací v UI
-        self.info_panel.content[2].text = f"Typ: {tree_type.capitalize()}"
-        self.info_panel.content[3].text = f"Výška: {self.tree.height:.2f} m"
-        self.info_panel.content[4].text = f"Počet větví: {self.tree.branch_count}"
+        self.generate_tree()
 
-if __name__ == '__main__':
-    app = FractalForestApp()
-    app.run()
+    def generate_tree(self):
+        # Náhodně vybere typ stromu
+        tree_type = random.choice(self.tree_types)
+        print(f"Generuji strom typu: {tree_type.name}")
+        
+        # Vytvoří L-systém s vybraným typem
+        self.l_system = LSystem(tree_type)
+        
+        # Generuje řetězec L-systému
+        self.l_system.generate()
+        
+        # Vytvoří geometrii stromu
+        vertices, indices = self.l_system.create_geometry()
+        
+        # Aktualizuje geometrii v rendereru
+        self.renderer.update_geometry(vertices, indices)
+
+    def key_callback(self, window, key, scancode, action, mods):
+        if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
+            glfw.set_window_should_close(window, True)
+        
+        # Generování nového stromu na stisk mezerníku
+        if key == glfw.KEY_SPACE and action == glfw.PRESS:
+            self.generate_tree()
+
+    def resize_callback(self, window, width, height):
+        self.width, self.height = width, height
+        self.ctx.viewport = (0, 0, width, height)
+        self.camera.set_projection(width, height)
+
+    def run(self):
+        # Hlavní smyčka aplikace
+        while not glfw.window_should_close(self.window):
+            # Vyčištění obrazovky
+            self.ctx.clear(0.2, 0.3, 0.3)
+            
+            # Vykreslení stromu
+            self.renderer.render()
+            
+            # Výměna bufferů a zpracování událostí
+            glfw.swap_buffers(self.window)
+            glfw.poll_events()
+
+        # Úklid
+        self.renderer.cleanup()
+        glfw.terminate()
+
+def main():
+    try:
+        app = Application()
+        app.run()
+    except Exception as e:
+        print(f"Chyba: {e}")
+        glfw.terminate()
+
+if __name__ == "__main__":
+    main()
