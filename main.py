@@ -1,12 +1,21 @@
-#!/usr/bin/env python3
-# -*- coding: utf-8 -*-
-
 import glfw
 import moderngl
 import numpy as np
 import random
 import sys
 import os
+import logging
+
+# Nastavení loggeru
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler(sys.stdout)
+    ]
+)
+
+logger = logging.getLogger('FractalForest')
 
 # Přidání cesty k modulům
 sys.path.append(os.path.dirname(os.path.abspath(__file__)))
@@ -18,8 +27,10 @@ from engine.camera import Camera
 
 class Application:
     def __init__(self, width=800, height=600):
+        logger.info("Inicializace aplikace")
         # Inicializace GLFW
         if not glfw.init():
+            logger.error("Nelze inicializovat GLFW")
             raise RuntimeError("Nelze inicializovat GLFW")
 
         # Konfigurace GLFW
@@ -32,9 +43,12 @@ class Application:
         # Vytvoření okna
         self.window = glfw.create_window(width, height, "L-System 3D Trees", None, None)
         if not self.window:
+            logger.error("Nelze vytvořit GLFW okno")
             glfw.terminate()
             raise RuntimeError("Nelze vytvořit GLFW okno")
 
+        logger.info(f"Vytvořeno okno o rozměrech {width}x{height}")
+        
         # Nastavení okna jako aktuálního OpenGL kontextu
         glfw.make_context_current(self.window)
         
@@ -46,16 +60,19 @@ class Application:
         self.ctx = moderngl.create_context()
         self.ctx.enable(moderngl.DEPTH_TEST | moderngl.CULL_FACE | moderngl.BLEND)
         self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        logger.info("ModernGL kontext inicializován")
 
         # Inicializace kamery
         self.camera = Camera(width, height)
         self.width, self.height = width, height
+        logger.info("Kamera inicializována")
 
         # Definice dostupných typů stromů
         self.tree_types = [TreeType1(), TreeType2()]
         
         # Renderer pro vykreslování
         self.renderer = Renderer(self.ctx, self.camera)
+        logger.info("Renderer inicializován")
         
         # Generování L-systému a stromu
         self.generate_tree()
@@ -63,34 +80,45 @@ class Application:
     def generate_tree(self):
         # Náhodně vybere typ stromu
         tree_type = random.choice(self.tree_types)
-        print(f"Generuji strom typu: {tree_type.name}")
+        logger.info(f"Generuji strom typu: {tree_type.name}")
         
         # Vytvoří L-systém s vybraným typem
         self.l_system = LSystem(tree_type)
         
         # Generuje řetězec L-systému
-        self.l_system.generate()
+        result = self.l_system.generate()
+        logger.debug(f"Vygenerovaný L-systém má délku {len(result)} znaků")
         
-        # Vytvoří geometrii stromu
-        vertices, indices = self.l_system.create_geometry()
-        
-        # Aktualizuje geometrii v rendereru
-        self.renderer.update_geometry(vertices, indices)
+        try:
+            # Vytvoří geometrii stromu
+            vertices, indices = self.l_system.create_geometry()
+            logger.info(f"Vytvořena geometrie: {len(vertices)/7} vrcholů, {len(indices)} indexů")
+            
+            # Aktualizuje geometrii v rendereru
+            self.renderer.update_geometry(vertices, indices)
+            logger.info("Geometrie úspěšně aktualizována v rendereru")
+        except Exception as e:
+            logger.error(f"Chyba při vytváření geometrie: {e}")
+            raise
 
     def key_callback(self, window, key, scancode, action, mods):
         if key == glfw.KEY_ESCAPE and action == glfw.PRESS:
+            logger.info("Ukončuji aplikaci (stisknuta klávesa ESC)")
             glfw.set_window_should_close(window, True)
         
         # Generování nového stromu na stisk mezerníku
         if key == glfw.KEY_SPACE and action == glfw.PRESS:
+            logger.info("Generování nového stromu (stisknuta mezerník)")
             self.generate_tree()
 
     def resize_callback(self, window, width, height):
         self.width, self.height = width, height
         self.ctx.viewport = (0, 0, width, height)
         self.camera.set_projection(width, height)
+        logger.info(f"Změna velikosti okna na {width}x{height}")
 
     def run(self):
+        logger.info("Spouštím hlavní smyčku aplikace")
         # Hlavní smyčka aplikace
         while not glfw.window_should_close(self.window):
             # Vyčištění obrazovky
@@ -104,15 +132,17 @@ class Application:
             glfw.poll_events()
 
         # Úklid
+        logger.info("Ukončuji aplikaci a provádím úklid")
         self.renderer.cleanup()
         glfw.terminate()
 
 def main():
     try:
+        logger.info("Spouštím aplikaci FractalForest")
         app = Application()
         app.run()
     except Exception as e:
-        print(f"Chyba: {e}")
+        logger.error(f"Kritická chyba: {e}")
         glfw.terminate()
 
 if __name__ == "__main__":

@@ -1,7 +1,11 @@
 import numpy as np
 import random
 import math
+import logging
 from typing import List, Tuple, Dict
+
+# Nastavení loggeru
+logger = logging.getLogger('FractalForest.LSystem')
 
 class LSystem:
     def __init__(self, tree_definition):
@@ -24,12 +28,15 @@ class LSystem:
         # Výsledná geometrie
         self.vertices = []
         self.indices = []
+        
+        logger.info(f"Vytvořen L-systém s axiomem: {self.axiom}, počet iterací: {self.iterations}")
 
     def generate(self):
         """Generuje řetězec L-systému na základě pravidel"""
+        logger.info("Začínám generovat L-systém")
         result = self.axiom
         
-        for _ in range(self.iterations):
+        for i in range(self.iterations):
             next_result = ""
             for char in result:
                 if char in self.rules:
@@ -43,12 +50,15 @@ class LSystem:
                 else:
                     next_result += char
             result = next_result
+            logger.debug(f"Iterace {i+1}, délka řetězce: {len(result)}")
         
         self.current_string = result
+        logger.info(f"L-systém vygenerován, konečná délka: {len(result)}")
         return result
 
-    def create_geometry(self) -> Tuple[List[float], List[int]]:
+    def create_geometry(self) -> Tuple[np.ndarray, np.ndarray]:
         """Vytvoří 3D geometrii stromu na základě vygenerovaného řetězce L-systému"""
+        logger.info("Začínám vytvářet geometrii stromu")
         # Reset geometrie
         self.vertices = []
         self.indices = []
@@ -67,6 +77,7 @@ class LSystem:
         
         # Index pro vrcholy
         vertex_index = 0
+        segment_count = 0
         
         # Interpretace řetězce L-systému
         for char in self.current_string:
@@ -80,6 +91,7 @@ class LSystem:
                 # Vytvoření válce (zjednodušeně jako 8-boký hranol)
                 self._create_cylinder_segment(position, new_position, thickness, self.color, vertex_index)
                 vertex_index += 16  # 8 vrcholů nahoře + 8 vrcholů dole
+                segment_count += 1
                 
                 # Aktualizace pozice
                 position = new_position
@@ -127,10 +139,13 @@ class LSystem:
                 if stack:
                     position, direction, up, length, thickness = stack.pop()
         
+        logger.info(f"Vytvořeno {segment_count} segmentů stromu")
+        
         # Převedení seznamů na numpy pole pro ModernGL
         vertices_array = np.array(self.vertices, dtype=np.float32)
         indices_array = np.array(self.indices, dtype=np.uint32)
         
+        logger.info(f"Finální geometrie: {len(vertices_array)} vrcholů, {len(indices_array)} indexů")
         return vertices_array, indices_array
 
     def _rotate_direction(self, vector, axis, angle):
@@ -155,6 +170,7 @@ class LSystem:
         direction = end - start
         height = np.linalg.norm(direction)
         if height < 1e-6:
+            logger.warning("Příliš krátký segment, přeskakuji")
             return  # Příliš krátký segment, přeskočíme
             
         direction = direction / height
@@ -178,10 +194,13 @@ class LSystem:
             
             # Spodní základna
             point = start + radius * (perpendicular * dx + perpendicular2 * dy)
+            # OPRAVA: Přidáme plnou barvu RGBA (4 komponenty)
+            # Původní: self.vertices.extend([point[0], point[1], point[2], color[0], color[1], color[2], color[3]])
             self.vertices.extend([point[0], point[1], point[2], color[0], color[1], color[2], color[3]])
             
             # Horní základna
             point = end + radius * (perpendicular * dx + perpendicular2 * dy)
+            # OPRAVA: Přidáme plnou barvu RGBA (4 komponenty)
             self.vertices.extend([point[0], point[1], point[2], color[0], color[1], color[2], color[3]])
         
         # Indexy pro vykreslení trojúhelníků
