@@ -1,11 +1,12 @@
-# generation/lsystem.py
 import math
 import random
 import numpy as np
+import logging
 
 class LSystem:
     """Třída pro implementaci L-systému a generování geometrie."""
-    def __init__(self, axiom, rules, angle, scale, initial_length=0.1, initial_width=0.03):
+    def __init__(self, axiom, rules, angle, scale, initial_length=0.1, initial_width=0.03,
+                 trunk_color=(0.55, 0.27, 0.07), leaf_color=(0.0, 0.8, 0.0)):
         self.axiom = axiom
         self.rules = rules
         # Přidání malé náhodnosti k úhlu a škále pro variabilitu
@@ -13,25 +14,47 @@ class LSystem:
         self.scale = scale * random.uniform(0.95, 1.05)
         self.initial_length = initial_length
         self.initial_width = initial_width
+        self.trunk_color = np.array(trunk_color, dtype='f4')
+        
+        # Náhodnost v barvě listů pro větší variabilitu
+        if isinstance(leaf_color, tuple):
+            self.leaf_color = np.array(leaf_color, dtype='f4')
+        else:
+            # Pokud je zadán rozsah barev, vybereme náhodnou barvu
+            leaf_min, leaf_max = leaf_color
+            self.leaf_color = np.array([
+                random.uniform(leaf_min[0], leaf_max[0]),
+                random.uniform(leaf_min[1], leaf_max[1]),
+                random.uniform(leaf_min[2], leaf_max[2])
+            ], dtype='f4')
+        
         self.current_string = axiom
         self.iterations = 0 # Přidáno pro sledování iterací
+        logging.debug(f"LSystem initialized with angle={math.degrees(self.angle):.1f}°, scale={self.scale:.2f}")
 
     def generate(self, iterations):
         """Generuje řetězec L-systému po zadaný počet iterací."""
         self.iterations = iterations
         current = self.axiom
-        for _ in range(iterations):
+        logging.debug(f"Starting L-system generation with axiom: {self.axiom}")
+        
+        for i in range(iterations):
             next_gen = ""
             for char in current:
                 # Stochastické pravidlo - možnost nahradit F i něčím jiným s malou pravděpodobností
                 if char == 'F' and random.random() < 0.02: # Malá šance na změnu
-                    next_gen += random.choice(["F", "FF", "F[+F]F[-F]F"]) # Příklad variace
+                    variation = random.choice(["F", "FF", "F[+F]F[-F]F"])
+                    next_gen += variation
+                    logging.debug(f"Applied stochastic rule on F: {variation}")
                 elif char in self.rules:
                     next_gen += self.rules[char]
                 else:
                     next_gen += char
             current = next_gen
+            logging.debug(f"Generation {i+1} complete, string length: {len(current)}")
+            
         self.current_string = current
+        logging.info(f"L-system string generated with {iterations} iterations, final length: {len(self.current_string)}")
         return current
 
     def get_vertices(self):
@@ -40,6 +63,7 @@ class LSystem:
         colors = []
 
         stack = []
+        # Upraveno - začátek kmene je nyní přesně ve středu
         position = np.array([0.0, -0.8, 0.0], dtype='f4') # Začátek kmene
         direction = np.array([0.0, 1.0, 0.0], dtype='f4') # Směr nahoru
         # Délka se může lišit v závislosti na iteracích a scale
@@ -47,8 +71,8 @@ class LSystem:
         branch_width = self.initial_width # Šířka se může také měnit, ale pro jednoduchost necháme
 
         # Barvy
-        trunk_color = np.array([0.55, 0.27, 0.07], dtype='f4') # Hnědá
-        leaf_color = np.array([0.0, random.uniform(0.6, 0.9), 0.0], dtype='f4') # Mírně náhodná zelená
+        trunk_color = self.trunk_color
+        leaf_color = self.leaf_color
 
         for char in self.current_string:
             if char == 'F': # Kresli vpřed
@@ -84,7 +108,7 @@ class LSystem:
                 if stack: # Zajistíme, že stack není prázdný
                     position, direction, branch_length = stack.pop()
                 else:
-                    print("Warning: Trying to pop from an empty stack.") # Debugging
+                    logging.warning("Trying to pop from an empty stack.")
 
             elif char == 'X': # X reprezentuje list nebo koncový bod
                 # Můžeme zde přidat geometrii listu, pro jednoduchost necháme jako koncový bod
@@ -107,7 +131,9 @@ class LSystem:
                  colors.extend(leaf_color) # "List" je zelený
 
         if not vertices: # Pokud by se nic nevygenerovalo
-             return np.array([], dtype='f4'), np.array([], dtype='f4')
+             logging.warning("No vertices generated from L-system string")
+             return np.array([], dtype='f4'), np.array
+
 
         return np.array(vertices, dtype='f4').flatten(), np.array(colors, dtype='f4').flatten()
 

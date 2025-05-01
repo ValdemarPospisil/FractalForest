@@ -1,35 +1,9 @@
-# engine/renderer.py
 import moderngl
 import glfw
 import numpy as np
+import logging
+import os
 from .camera import Camera # Relativní import kamery
-
-VERTEX_SHADER = """
-#version 330
-in vec3 in_position;
-in vec3 in_color;
-
-out vec3 v_color; // Přeposíláme barvu do fragment shaderu
-
-uniform mat4 projection;
-uniform mat4 view;
-uniform mat4 model;
-
-void main() {
-    gl_Position = projection * view * model * vec4(in_position, 1.0);
-    v_color = in_color;
-}
-"""
-
-FRAGMENT_SHADER = """
-#version 330
-in vec3 v_color; // Přijímáme barvu z vertex shaderu
-out vec4 fragColor;
-
-void main() {
-    fragColor = vec4(v_color, 1.0);
-}
-"""
 
 class Renderer:
     """Třída pro správu vykreslování pomocí ModernGL."""
@@ -38,11 +12,9 @@ class Renderer:
         self.height = height
         self.window = self._initialize_window(title)
         self.ctx = moderngl.create_context()
-
-        self.program = self.ctx.program(
-            vertex_shader=VERTEX_SHADER,
-            fragment_shader=FRAGMENT_SHADER
-        )
+        
+        # Načtení shaderů ze souborů
+        self.program = self._load_program('shaders/vertex.glsl', 'shaders/fragment.glsl')
 
         self.vbo_vertices = None
         self.vbo_colors = None
@@ -54,10 +26,30 @@ class Renderer:
         # self.ctx.enable(moderngl.BLEND)
         # self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
         self.ctx.line_width = 2.0 # Mírně tlustší čáry pro lepší viditelnost
+        
+        logging.info("Renderer initialized successfully")
+
+    def _load_program(self, vertex_path, fragment_path):
+        """Načte a zkompiluje shader program ze souborů."""
+        try:
+            with open(vertex_path, 'r') as f:
+                vertex_shader = f.read()
+            
+            with open(fragment_path, 'r') as f:
+                fragment_shader = f.read()
+                
+            return self.ctx.program(
+                vertex_shader=vertex_shader,
+                fragment_shader=fragment_shader
+            )
+        except Exception as e:
+            logging.error(f"Failed to load shaders: {e}")
+            raise
 
     def _initialize_window(self, title):
         """Inicializuje GLFW okno."""
         if not glfw.init():
+            logging.error("Failed to initialize GLFW")
             raise RuntimeError("Nelze inicializovat GLFW")
 
         glfw.window_hint(glfw.CONTEXT_VERSION_MAJOR, 3)
@@ -66,14 +58,15 @@ class Renderer:
         glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
         #glfw.window_hint(glfw.SAMPLES, 4) # Antialiasing (volitelné)
 
-
         window = glfw.create_window(self.width, self.height, title, None, None)
         if not window:
             glfw.terminate()
+            logging.error("Failed to create GLFW window")
             raise RuntimeError("Nelze vytvořit GLFW okno")
 
         glfw.make_context_current(window)
         #glfw.swap_interval(1) # VSync (volitelné)
+        logging.info(f"GLFW window created with dimensions {self.width}x{self.height}")
         return window
 
     def setup_object(self, vertices, colors):
@@ -84,7 +77,7 @@ class Renderer:
         if self.vao: self.vao.release()
 
         if len(vertices) == 0 or len(colors) == 0:
-             print("Warning: No vertices or colors to set up.")
+             logging.warning("No vertices or colors to set up.")
              self.vao = None # Zajistíme, že se nepokusíme vykreslit prázdné VAO
              return
 
@@ -96,13 +89,13 @@ class Renderer:
             (self.vbo_colors, '3f', 'in_color')
         ]
         self.vao = self.ctx.vertex_array(self.program, vao_content)
+        logging.debug(f"Object set up with {len(vertices)//3} vertices")
 
     def render(self, camera: Camera, model_matrix):
         """Vykreslí scénu."""
         self.ctx.clear(0.9, 0.95, 1.0) # Světle modrá obloha
 
         if not self.vao:
-            #print("Skipping render: VAO not available.")
             return # Nic k vykreslení
 
         # Aktualizace uniformů
@@ -119,6 +112,7 @@ class Renderer:
         if self.vbo_colors: self.vbo_colors.release()
         if self.vao: self.vao.release()
         if self.program: self.program.release()
+        logging.info("OpenGL resources released")
         # Kontext se uvolní automaticky při ukončení programu,
         # ale explicitní uvolnění není na škodu, pokud by se renderer používal déle.
         # self.ctx.release()
