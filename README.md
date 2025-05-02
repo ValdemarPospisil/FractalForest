@@ -16,7 +16,7 @@ FractalForest je aplikace napsaná v Pythonu, která demonstruje procedurální 
 
 1. Naklonujte repozitář:
 ```
-git clone https://github.com/username/FractalForest.git
+git clone https://github.com/ValdemarPospisil/FractalForest.git
 cd FractalForest
 ```
 
