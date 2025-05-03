@@ -61,18 +61,19 @@ class LSystem:
         """Převádí vygenerovaný řetězec na posloupnost vrcholů a barev pro vykreslení."""
         vertices = []
         colors = []
+        normals = []  # Přidáváme normály pro lepší osvětlení
 
         stack = []
         # Upraveno - začátek kmene je nyní přesně ve středu
-        position = np.array([0.0, -0.8, 0.0], dtype='f4') # Začátek kmene
+        position = np.array([0.0, -0.5, 0.0], dtype='f4') # Začátek kmene
         direction = np.array([0.0, 1.0, 0.0], dtype='f4') # Směr nahoru
         # Délka se může lišit v závislosti na iteracích a scale
         branch_length = self.initial_length * (self.scale ** (self.iterations / 2)) # Upravená délka
         branch_width = self.initial_width # Šířka se může také měnit, ale pro jednoduchost necháme
 
-        # Barvy
-        trunk_color = self.trunk_color
-        leaf_color = self.leaf_color
+        # Pro sledování hierarchie větvení - použijeme pro výpočet barev
+        branch_depth = 0
+        max_branch_depth = 6  # Omezení pro barevný gradient
 
         for char in self.current_string:
             if char == 'F': # Kresli vpřed
@@ -82,9 +83,17 @@ class LSystem:
                 # Jednoduchá čára pro segment
                 vertices.extend(start)
                 vertices.extend(end)
-                colors.extend(trunk_color)
-                colors.extend(trunk_color)
-
+                
+                # Výpočet barvy na základě tloušťky větve (hloubky větvení)
+                segment_color = self._compute_segment_color(branch_depth, max_branch_depth)
+                colors.extend(segment_color)
+                colors.extend(segment_color)
+                
+                # Výpočet normály pro daný segment
+                segment_normal = self._compute_normal(direction)
+                normals.extend(segment_normal)
+                normals.extend(segment_normal)
+                
                 position = end # Aktualizace pozice
 
             elif char == '+': # Otoč doleva (kolem Y)
@@ -101,41 +110,109 @@ class LSystem:
                 direction = self._rotate_z(direction, -self.angle)
 
             elif char == '[': # Ulož stav
-                # Při větvení zmenšíme délku
-                stack.append((position.copy(), direction.copy(), branch_length))
+                # Při větvení zmenšíme délku a zvýšíme hloubku větvení
+                stack.append((position.copy(), direction.copy(), branch_length, branch_depth))
                 branch_length *= self.scale
+                branch_depth += 1  # Zvýšíme hloubku větvení
             elif char == ']': # Obnov stav
                 if stack: # Zajistíme, že stack není prázdný
-                    position, direction, branch_length = stack.pop()
+                    position, direction, branch_length, branch_depth = stack.pop()
                 else:
                     logging.warning("Trying to pop from an empty stack.")
 
             elif char == 'X': # X reprezentuje list nebo koncový bod
-                # Můžeme zde přidat geometrii listu, pro jednoduchost necháme jako koncový bod
-                # Nebo přidáme krátký zelený segment jako náznak listu
-                 start = position.copy()
-                 leaf_size = branch_length * 0.5 # Velikost "listu"
-                 # Náhodný směr pro list
-                 leaf_dir = direction + np.random.uniform(-0.3, 0.3, 3)
-                 norm = np.linalg.norm(leaf_dir)
-                 if norm > 1e-6: # Zabráníme dělení nulou
-                    leaf_dir /= norm
-                 else:
-                     leaf_dir = direction # Fallback
-
-                 end = position + leaf_dir * leaf_size
-
-                 vertices.extend(start)
-                 vertices.extend(end)
-                 colors.extend(trunk_color) # Konec větve je ještě hnědý
-                 colors.extend(leaf_color) # "List" je zelený
+                # Přidáme list jako krátký zelený segment
+                start = position.copy()
+                
+                # Náhodný směr pro list s větší variabilitou
+                leaf_dir = direction.copy()
+                # Rotace okolo náhodné osy pro různé natočení listů
+                random_angle = random.uniform(-math.pi/3, math.pi/3)  # Větší rozsah úhlů
+                random_axis = random.choice(['x', 'y', 'z'])
+                if random_axis == 'x':
+                    leaf_dir = self._rotate_x(leaf_dir, random_angle)
+                elif random_axis == 'y':
+                    leaf_dir = self._rotate_y(leaf_dir, random_angle)
+                else:
+                    leaf_dir = self._rotate_z(leaf_dir, random_angle)
+                
+                # Velikost listu závisí na hloubce větvení
+                leaf_size = branch_length * (1.0 + 0.5 * branch_depth / max_branch_depth)
+                end = position + leaf_dir * leaf_size
+                
+                # Přidáme list do geometrie
+                vertices.extend(start)
+                vertices.extend(end)
+                
+                # Přechod barvy od kmene k listu
+                transition_color = self._compute_leaf_transition_color(branch_depth, max_branch_depth)
+                colors.extend(transition_color)
+                colors.extend(self.leaf_color)
+                
+                # Normála pro list
+                leaf_normal = self._compute_normal(leaf_dir)
+                normals.extend(leaf_normal)
+                normals.extend(leaf_normal)
 
         if not vertices: # Pokud by se nic nevygenerovalo
-             logging.warning("No vertices generated from L-system string")
-             return np.array([], dtype='f4'), np.array
+            logging.warning("No vertices generated from L-system string")
+            return np.array([], dtype='f4'), np.array([], dtype='f4'), np.array([], dtype='f4')
 
+        return np.array(vertices, dtype='f4').flatten(), np.array(colors, dtype='f4').flatten(), np.array(normals, dtype='f4').flatten()
 
-        return np.array(vertices, dtype='f4').flatten(), np.array(colors, dtype='f4').flatten()
+    def _compute_segment_color(self, depth, max_depth):
+        """Vypočítá barvu segmentu na základě hloubky větvení."""
+        # Základní barva kmene
+        trunk_color = np.array(self.trunk_color)
+        
+        # Čím vyšší větvení, tím světlejší odstín
+        color_factor = min(depth / max_depth, 1.0)
+        
+        # Postupný přechod barvy směrem ke koncům větví
+        # Světlejší a teplejší odstíny pro tenčí větve
+        color_shift = np.array([0.2, 0.08, 0.02]) * color_factor
+        color = trunk_color + color_shift
+        
+        # Ujistíme se, že barva zůstává v rozsahu 0-1
+        return np.clip(color, 0.0, 1.0)
+    
+    def _compute_leaf_transition_color(self, depth, max_depth):
+        """Vypočítá přechodovou barvu mezi kmenem a listem."""
+        trunk_color = np.array(self.trunk_color)
+        leaf_color = np.array(self.leaf_color)
+        
+        # Míra přechodu závisí na hloubce
+        transition = min(0.3 + depth / max_depth * 0.7, 1.0)
+        
+        # Lineární interpolace mezi barvou kmene a listu
+        color = trunk_color * (1 - transition) + leaf_color * transition
+        
+        return np.clip(color, 0.0, 1.0)
+    
+    def _compute_normal(self, direction):
+        """Vypočítá normálu kolmou na směr větve."""
+        # Preferovaný způsob výpočtu normály závisí na směru větve
+        up = np.array([0.0, 1.0, 0.0], dtype='f4')
+        
+        # Normálový vektor kolmý na směr větve a světový nahoru
+        cross = np.cross(direction, up)
+        norm_cross = np.linalg.norm(cross)
+        
+        if norm_cross < 1e-6:  # Téměř paralelní s osou Y
+            # Použijeme osu X jako alternativní vektor pro výpočet
+            cross = np.cross(direction, np.array([1.0, 0.0, 0.0], dtype='f4'))
+            norm_cross = np.linalg.norm(cross)
+            
+            if norm_cross < 1e-6:  # I tohle selhalo
+                # Poslední možnost - použijeme Z osu
+                cross = np.cross(direction, np.array([0.0, 0.0, 1.0], dtype='f4'))
+                norm_cross = np.linalg.norm(cross)
+                
+                if norm_cross < 1e-6:  # Pro případ totálního selhání (nemělo by nastat)
+                    return np.array([1.0, 0.0, 0.0], dtype='f4')
+        
+        # Normalizace a návrat normály
+        return cross / norm_cross
 
     def _rotate_y(self, direction, angle):
         """Rotace vektoru kolem osy Y."""

@@ -18,6 +18,7 @@ class Renderer:
 
         self.vbo_vertices = None
         self.vbo_colors = None
+        self.vbo_normals = None
         self.vao = None
 
         # Nastavení počátečních OpenGL stavů
@@ -25,7 +26,8 @@ class Renderer:
         # Můžeme zapnout i blendování, pokud budeme mít průhlednost
         # self.ctx.enable(moderngl.BLEND)
         # self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        self.ctx.line_width = 2.0 # Mírně tlustší čáry pro lepší viditelnost
+        self.ctx.line_width = 85 # Mírně tlustší čáry pro lepší viditelnost
+        self.program['light_direction'] = (0.5, 1.0, 0.5)
         
         logging.info("Renderer initialized successfully")
 
@@ -69,24 +71,47 @@ class Renderer:
         logging.info(f"GLFW window created with dimensions {self.width}x{self.height}")
         return window
 
-    def setup_object(self, vertices, colors):
+    # Úprava v engine/renderer.py - v metodě setup_object
+    def setup_object(self, vertices, colors, normals=None):
         """Vytvoří VBO a VAO pro objekt."""
         # Uvolní staré buffery, pokud existují
         if self.vbo_vertices: self.vbo_vertices.release()
         if self.vbo_colors: self.vbo_colors.release()
+        if self.vbo_normals: self.vbo_normals.release()
         if self.vao: self.vao.release()
 
         if len(vertices) == 0 or len(colors) == 0:
-             logging.warning("No vertices or colors to set up.")
-             self.vao = None # Zajistíme, že se nepokusíme vykreslit prázdné VAO
-             return
+            logging.warning("No vertices or colors to set up.")
+            self.vao = None
+            return
 
         self.vbo_vertices = self.ctx.buffer(vertices.tobytes())
         self.vbo_colors = self.ctx.buffer(colors.tobytes())
+    
+        # Pokud normály nejsou poskytnuty, vytvoříme základní
+        if normals is None:
+            # Vytvoříme jednoduché normály (v reálném stromu by byly sofistikovanější)
+            normals = np.zeros_like(vertices)
+            for i in range(0, len(vertices), 6):  # Pro každý pár vrcholů (čáru)
+                if i+3 < len(vertices):
+                    # Vytvoříme normálu kolmou k segmentu
+                    direction = vertices[i+3:i+6] - vertices[i:i+3]
+                # Rotujeme o 90 stupňů kolem osy Y pro základní normálu
+                normal = np.array([direction[2], 0, -direction[0]])
+                if np.linalg.norm(normal) < 0.001:
+                    normal = np.array([0, 1, 0])  # Fallback
+                else:
+                    normal = normal / np.linalg.norm(normal)
+                
+                normals[i:i+3] = normal
+                normals[i+3:i+6] = normal
+    
+        self.vbo_normals = self.ctx.buffer(normals.astype('f4').tobytes())
 
         vao_content = [
             (self.vbo_vertices, '3f', 'in_position'),
-            (self.vbo_colors, '3f', 'in_color')
+            (self.vbo_colors, '3f', 'in_color'),
+            (self.vbo_normals, '3f', 'in_normal')
         ]
         self.vao = self.ctx.vertex_array(self.program, vao_content)
         logging.debug(f"Object set up with {len(vertices)//3} vertices")

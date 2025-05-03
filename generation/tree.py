@@ -154,7 +154,7 @@ class StandardTree(TreeDefinition):
     
     @property
     def iterations(self):
-        return random.randint(4, 5)
+        return random.randint(3, 4)
     
     @property
     def angle(self):
@@ -170,7 +170,7 @@ class StandardTree(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return 3.0
+        return 1.0
     
     @property
     def random_length_variation(self):
@@ -186,7 +186,7 @@ class StandardTree(TreeDefinition):
     
     @property
     def color(self):
-        return [0.55, 0.27, 0.07, 1.0]
+        return [0.65, 0.35, 0.15, 1.0]
 
 
 class BushyTree(TreeDefinition):
@@ -228,7 +228,7 @@ class BushyTree(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return 4.0
+        return 1.0
     
     @property
     def random_length_variation(self):
@@ -244,7 +244,7 @@ class BushyTree(TreeDefinition):
     
     @property
     def color(self):
-        return [0.55, 0.27, 0.07, 1.0]
+        return [0.47, 0.35, 0.2, 1.0]
 
 
 class WeepingTree(TreeDefinition):
@@ -270,7 +270,7 @@ class WeepingTree(TreeDefinition):
     
     @property
     def iterations(self):
-        return random.randint(4, 5)
+        return random.randint(3, 4)
     
     @property
     def angle(self):
@@ -286,7 +286,7 @@ class WeepingTree(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return 3.0
+        return 1.5
     
     @property
     def random_length_variation(self):
@@ -302,7 +302,7 @@ class WeepingTree(TreeDefinition):
     
     @property
     def color(self):
-        return [0.55, 0.27, 0.07, 1.0]
+        return [0.6, 0.35, 0.2, 1.0]
 
 
 class BirchTree(TreeDefinition):
@@ -344,7 +344,7 @@ class BirchTree(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return 5.0
+        return 1.0
     
     @property
     def random_length_variation(self):
@@ -360,7 +360,7 @@ class BirchTree(TreeDefinition):
     
     @property
     def color(self):
-        return [0.8, 0.8, 0.7, 1.0]
+        return [0.9, 0.88, 0.8, 1.0]
 
 
 class PineTree(TreeDefinition):
@@ -378,14 +378,16 @@ class PineTree(TreeDefinition):
     def rules(self):
         return {
             "F": [
-                "FF-[-F+F+F]+[+F-F-F]",
-                "FF+[+F-F-F]-[-F+F+F]"
+                "FF-[-F+F+F]",
+                "[+F-F-F]",
+                "FF+[+F-F-F]",
+                "[-F+F+F]"
             ]
         }
     
     @property
     def iterations(self):
-        return random.randint(2, 3)
+        return random.randint(3, 4)
     
     @property
     def angle(self):
@@ -401,7 +403,7 @@ class PineTree(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return 2.0
+        return 1.0
     
     @property
     def random_length_variation(self):
@@ -417,7 +419,7 @@ class PineTree(TreeDefinition):
     
     @property
     def color(self):
-        return [0.45, 0.25, 0.1, 1.0]
+        return [0.38, 0.2, 0.12, 1.0]
 
 
 # List of available tree types

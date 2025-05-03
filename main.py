@@ -38,8 +38,8 @@ def main():
     # Vytvoření instance kamery
     camera = Camera(renderer.width, renderer.height)
     # Lepší pozice kamery pro pohled na strom
-    camera.position = np.array([0.0, 0.5, 4.0])  # Posunuta dozadu a mírně nahoru
-    camera.target = np.array([0.0, 0.25, 0.0])    # Míří na střed
+    camera.position = np.array([0.0, 0.25, 2.0])  # Posunuta dozadu a mírně nahoru
+    camera.target = np.array([0.2, 0.25, 0.0])    # Míří na střed
     camera.update_view_matrix()
     logging.info("Camera positioned at %s, looking at %s", camera.position, camera.target)
 
@@ -63,7 +63,7 @@ def main():
     logging.info(f"String length: {len(lsystem.current_string)} characters")
 
     # Získání vrcholů a barev
-    vertices, colors = lsystem.get_vertices()
+    vertices, colors, normals = lsystem.get_vertices()
 
     if vertices.size == 0:
         logging.error("No vertices generated. Exiting.")
@@ -112,7 +112,6 @@ def main():
         if glfw.get_key(renderer.window, glfw.KEY_SPACE) == glfw.PRESS:
             logging.info("Regenerating random tree...")
             tree_definition = get_random_tree_type()
-            logging.info(f"Selected tree type: '{tree_definition.name}'")
             regenerate_tree(tree_definition, renderer)
 
         # Výběr konkrétního typu stromu klávesami 1-6
@@ -132,6 +131,7 @@ def main():
     glfw.terminate()
     logging.info("Application exited cleanly.")
 
+
 def regenerate_tree(tree_definition, renderer):
     """Pomocná funkce pro regeneraci stromu."""
     lsystem = tree_definition.get_lsystem()
@@ -142,13 +142,14 @@ def regenerate_tree(tree_definition, renderer):
     logging.info(f"Parameters - angle: {math.degrees(lsystem.angle):.1f}°, scale: {lsystem.scale:.2f}")
     logging.info(f"String length: {len(lsystem.current_string)} characters")
     
-    vertices, colors = lsystem.get_vertices()
+    # Nově předáváme normály do setup_object
+    vertices, colors, normals = lsystem.get_vertices()
     if vertices.size > 0:
-        renderer.setup_object(vertices, colors)
+        renderer.setup_object(vertices, colors, normals)
         logging.info(f"Generated {vertices.size // 3} vertices for rendering")
     else:
         logging.error("No vertices generated during regeneration.")
-        renderer.setup_object(np.array([]), np.array([])) # Vyčistí VAO
+        renderer.setup_object(np.array([]), np.array([]), np.array([])) # Vyčistí VAO
 
 if __name__ == "__main__":
     main()
