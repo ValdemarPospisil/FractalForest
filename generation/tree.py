@@ -2,74 +2,86 @@ import random
 import math
 import logging
 from abc import ABC, abstractmethod
-from .lsystem import LSystem # Používáme relativní import
+from .lsystem import LSystem
 
 class TreeDefinition(ABC):
-    """Abstraktní třída pro definici různých typů stromů"""
+    """Abstract base class for defining different tree types"""
     
     @property
     @abstractmethod
     def name(self):
+        """Tree type name"""
         pass
     
     @property
     @abstractmethod
     def axiom(self):
+        """Starting axiom for L-system"""
         pass
     
     @property
     @abstractmethod
     def rules(self):
+        """Production rules for L-system"""
         pass
     
     @property
     @abstractmethod
     def iterations(self):
+        """Number of iterations to generate the tree"""
         pass
     
     @property
     @abstractmethod
     def angle(self):
+        """Base angle for branches in degrees"""
         pass
     
     @property
     @abstractmethod
     def thickness_ratio(self):
+        """Ratio for branch thickness reduction"""
         pass
     
     @property
     @abstractmethod
     def length_ratio(self):
+        """Ratio for branch length reduction"""
         pass
     
     @property
     @abstractmethod
     def random_angle_variation(self):
+        """Maximum random variation in angle (degrees)"""
         pass
     
     @property
     @abstractmethod
     def random_length_variation(self):
+        """Maximum random variation in length (proportion)"""
         pass
     
     @property
     @abstractmethod
     def base_length(self):
+        """Base length of the trunk"""
         pass
     
     @property
     @abstractmethod
     def base_thickness(self):
+        """Base thickness of the trunk"""
         pass
     
     @property
     @abstractmethod
     def color(self):
+        """Trunk color in RGBA format"""
         pass
     
     def get_lsystem(self) -> LSystem:
-        """Vrátí instanci LSystem pro tento typ stromu s náhodnými variacemi."""
-        # Vyber náhodné pravidlo z dostupných možností pro každý symbol
+        """Returns an LSystem instance for this tree type with random variations."""
+        # Select a random rule from available options for each symbol
         selected_rules = {}
         for symbol, rule_options in self.rules.items():
             if isinstance(rule_options, list):
@@ -77,13 +89,13 @@ class TreeDefinition(ABC):
             else:
                 selected_rules[symbol] = rule_options
         
-        # Aplikuj náhodné variace na úhel
+        # Apply random variations to angle
         final_angle = math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
         
-        # Aplikuj náhodné variace na délku
+        # Apply random variations to length
         final_length = self.base_length * (1 + random.uniform(-self.random_length_variation, self.random_length_variation))
         
-        # Vytvoř L-systém s vybranými parametry
+        # Create L-system with selected parameters
         lsystem = LSystem(
             axiom=self.axiom,
             rules=selected_rules,
@@ -91,23 +103,38 @@ class TreeDefinition(ABC):
             scale=self.length_ratio,
             initial_length=final_length,
             initial_width=self.base_thickness,
-            trunk_color=self.color[:3]  # Jen RGB komponenty pro kmen
+            trunk_color=self.color[:3]  # Only RGB components for trunk
         )
         
         logging.info(f"Created {self.name} with angle={math.degrees(final_angle):.1f}°, scale={self.length_ratio:.2f}")
         return lsystem
     
     def get_iterations(self) -> int:
-        """Vrátí počet iterací pro tento strom."""
+        """Returns the number of iterations for this tree."""
         return self.iterations
+    
+    def get_properties(self) -> dict:
+        """Returns a dictionary of tree properties for display purposes."""
+        properties = {
+            "name": self.name,
+            "axiom": self.axiom,
+            "iterations": self.iterations,
+            "angle": self.angle,
+            "thickness_ratio": self.thickness_ratio,
+            "length_ratio": self.length_ratio,
+            "base_length": self.base_length,
+            "base_thickness": self.base_thickness,
+            "color": self.color
+        }
+        return properties
 
 
 class StandardTree(TreeDefinition):
-    """Definice standardního stromu"""
+    """Definition of a standard tree"""
     
     @property
     def name(self):
-        return "Standardní strom"
+        return "Standard Tree"
     
     @property
     def axiom(self):
@@ -163,11 +190,11 @@ class StandardTree(TreeDefinition):
 
 
 class BushyTree(TreeDefinition):
-    """Definice keřovitého stromu"""
+    """Definition of a bushy tree"""
     
     @property
     def name(self):
-        return "Keřovitý strom"
+        return "Bushy Tree"
     
     @property
     def axiom(self):
@@ -221,11 +248,11 @@ class BushyTree(TreeDefinition):
 
 
 class WeepingTree(TreeDefinition):
-    """Definice převislého stromu"""
+    """Definition of a weeping tree"""
     
     @property
     def name(self):
-        return "Převislý strom"
+        return "Weeping Tree"
     
     @property
     def axiom(self):
@@ -278,13 +305,12 @@ class WeepingTree(TreeDefinition):
         return [0.55, 0.27, 0.07, 1.0]
 
 
-# Přidejte nové typy stromů podle předlohy
-class TreeType1(TreeDefinition):
-    """Definice prvního typu stromu - podobný bříze"""
+class BirchTree(TreeDefinition):
+    """Definition of a birch tree"""
     
     @property
     def name(self):
-        return "Bříza"
+        return "Birch Tree"
     
     @property
     def axiom(self):
@@ -318,31 +344,31 @@ class TreeType1(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return random.uniform(5.0, 10.0)
+        return 5.0
     
     @property
     def random_length_variation(self):
-        return random.uniform(0.1, 0.2)
+        return 0.1
     
     @property
     def base_length(self):
-        return random.uniform(0.4, 0.6)
+        return random.uniform(0.2, 0.3)
     
     @property
     def base_thickness(self):
-        return random.uniform(0.08, 0.12)
+        return random.uniform(0.02, 0.04)
     
     @property
     def color(self):
-        return [0.55, 0.35, 0.15, 1.0]
+        return [0.8, 0.8, 0.7, 1.0]
 
 
-class TreeType2(TreeDefinition):
-    """Definice druhého typu stromu - podobný smrku"""
+class PineTree(TreeDefinition):
+    """Definition of a pine tree"""
     
     @property
     def name(self):
-        return "Smrk"
+        return "Pine Tree"
     
     @property
     def axiom(self):
@@ -375,44 +401,44 @@ class TreeType2(TreeDefinition):
     
     @property
     def random_angle_variation(self):
-        return random.uniform(2.0, 5.0)
+        return 2.0
     
     @property
     def random_length_variation(self):
-        return random.uniform(0.05, 0.1)
+        return 0.05
     
     @property
     def base_length(self):
-        return random.uniform(0.5, 0.7)
+        return random.uniform(0.3, 0.4)
     
     @property
     def base_thickness(self):
-        return random.uniform(0.1, 0.15)
+        return random.uniform(0.03, 0.05)
     
     @property
     def color(self):
         return [0.45, 0.25, 0.1, 1.0]
 
 
-# Seznam dostupných typů stromů
-TREE_TYPES = [StandardTree, BushyTree, WeepingTree, TreeType1, TreeType2]
+# List of available tree types
+TREE_TYPES = [StandardTree, BushyTree, WeepingTree, BirchTree, PineTree]
 
 def get_random_tree_type() -> TreeDefinition:
-    """Vrátí instanci náhodně vybraného typu stromu."""
+    """Returns an instance of a randomly selected tree type."""
     chosen_type = random.choice(TREE_TYPES)
-    tree = chosen_type() # Vytvoří instanci vybrané třídy
+    tree = chosen_type()  # Create instance of the selected class
     logging.info(f"Selected tree type: {tree.name}")
     return tree
 
 
 def get_tree_by_name(name: str) -> TreeDefinition:
-    """Vrátí instanci stromu podle jména."""
+    """Returns a tree instance by name."""
     for tree_class in TREE_TYPES:
         tree_instance = tree_class()
         if tree_instance.name.lower() == name.lower():
             logging.info(f"Created tree by name: {name}")
             return tree_instance
     
-    # Pokud nenajdeme strom s daným jménem, vrátíme standardní strom
+    # If we don't find a tree with the given name, return the standard tree
     logging.warning(f"Unknown tree type: {name}, using StandardTree")
     return StandardTree()
