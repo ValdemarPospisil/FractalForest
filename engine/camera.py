@@ -10,8 +10,13 @@ class Camera:
         self.far = far
 
         self.position = Vector3([0.0, 0.0, 3.0]) # Posunuta dozadu
-        self.target = Vector3([0.0, 0.0, 0.0])   # Míří na střed
+        self.target = Vector3([0.0, 0.5, 0.0])   # Míří na střed
         self.up = Vector3([0.0, 1.0, 0.0])       # Y osa je nahoru
+        self.down = Vector3([0.0, -1.0, 0.0])
+        self.back = Vector3([0.0, 0.0, 1.0])
+        self.front = Vector3([0.0, 0.0, -1.0])
+        self.right = Vector3([1.0, 0.0, 0.0])
+        self.left = Vector3([-1.0, 0.0, 0.0])
 
         self.view_matrix = Matrix44.identity()
         self.projection_matrix = Matrix44.identity()

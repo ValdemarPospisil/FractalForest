@@ -7,149 +7,161 @@ import os
 import numpy as np
 
 # Importy z našich modulů
-from engine.renderer import Renderer
-from engine.camera import Camera
+from engine.renderer import Renderer 
+from engine.camera import Camera    
 from generation.tree import get_random_tree_type, get_tree_by_name, TREE_TYPES
+
+
 
 def setup_logging():
     """Nastaví logging pro aplikaci."""
-    # Zajistíme, že existuje adresář pro logy
     if not os.path.exists('logs'):
         os.makedirs('logs')
-        
-    # Nastavení formátu a úrovně loggeru
     logging.basicConfig(
         level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s',
+        format='%(asctime)s -  %(levelname)s - %(message)s', 
         handlers=[
-            logging.StreamHandler()  # Výstup i do konzole
+            # logging.FileHandler("logs/app.log"), # Optional: log to file
+            logging.StreamHandler()
         ]
     )
+    logging.getLogger('OpenGL').setLevel(logging.WARNING) # Quieten ModernGL/OpenGL noise if needed
     logging.info("Logging system initialized")
 
 def main():
-    # Nastavení loggování
     setup_logging()
-    
-    logging.info("Initializing application...")
-    # Vytvoření instance renderu (inicializuje okno a ModernGL)
-    renderer = Renderer(width=1024, height=768, title="Náhodný L-System Strom")
+    logger = logging.getLogger(__name__) # Use specific logger
 
-    # Vytvoření instance kamery
-    camera = Camera(renderer.width, renderer.height)
-    # Lepší pozice kamery pro pohled na strom
-    camera.position = np.array([0.0, 0.25, 2.0])  # Posunuta dozadu a mírně nahoru
-    camera.target = np.array([0.2, 0.25, 0.0])    # Míří na střed
-    camera.update_view_matrix()
-    logging.info("Camera positioned at %s, looking at %s", camera.position, camera.target)
+    logger.info("Initializing application...")
+    try:
+        renderer = Renderer(width=1366, height=768, title="Procedural L-System Forest") # Larger window
+        camera = Camera(renderer.width, renderer.height)
 
-    # Vypsání dostupných typů stromů
+        camera.position = np.array([0.0, 0.5, 2.5]) # Further back, slightly higher
+        #camera.target = np.array([0.0, 1.0, 0.0])   # Aim towards base/mid trunk
+        camera.update_view_matrix()
+        logger.info("Renderer and Camera initialized.")
+        logger.info(f"Camera positioned at {camera.position}, looking at {camera.target}")
+    except Exception as e:
+        logger.exception("Failed to initialize Renderer or Camera.")
+        return # Exit if core components fail
+
+    # Display available tree types
     available_trees = [tree_cls().name for tree_cls in TREE_TYPES]
-    logging.info(f"Available tree types: {', '.join(available_trees)}")
+    logger.info(f"Available tree types ({len(available_trees)}): {', '.join(available_trees)}")
+    logger.info("Controls: ESC=Exit, SPACE=New Random Tree, 1-%d=Select Specific Tree", len(TREE_TYPES))
 
-    logging.info("Generating tree...")
-    # Získání náhodného typu stromu
-    tree_definition = get_random_tree_type()
-    logging.info(f"Selected tree type: '{tree_definition.name}'")
 
-    # Získání L-systému pro tento typ
-    lsystem = tree_definition.get_lsystem()
+    # Initial tree generation
+    current_tree_def = None
+    def regenerate_tree(tree_definition, renderer):
+        """Pomocná funkce pro regeneraci stromu."""
+        nonlocal current_tree_def
+        if tree_definition is None:
+            logger.error("Cannot regenerate tree, definition is None.")
+            return
 
-    # Generování řetězce L-systému
-    iterations = tree_definition.get_iterations()
-    lsystem.generate(iterations)
-    logging.info(f"Generated L-system with {iterations} iterations")
-    logging.info(f"Base parameters - angle: {math.degrees(lsystem.angle):.1f}°, scale: {lsystem.scale:.2f}")
-    logging.info(f"String length: {len(lsystem.current_string)} characters")
+        current_tree_def = tree_definition # Store current definition
+        logger.info(f"--- Regenerating tree: '{tree_definition.name}' ---")
+        try:
+            lsystem = tree_definition.get_lsystem()
+            iterations = tree_definition.get_iterations()
+            lsystem.generate(iterations)
 
-    # Získání vrcholů a barev
-    vertices, colors, normals = lsystem.get_vertices()
+            logger.info(f"L-System params - Angle: {math.degrees(lsystem.angle):.1f}°, Scale: {lsystem.scale:.2f}, Width: {lsystem.initial_width:.3f}")
+            logger.info(f"Generated string length: {len(lsystem.current_string)} characters")
 
-    if vertices.size == 0:
-        logging.error("No vertices generated. Exiting.")
-        renderer.cleanup()
-        glfw.terminate()
-        return
+            vertices, colors, normals = lsystem.get_vertices()
 
-    logging.info(f"Generated {vertices.size // 3} vertices for rendering")
+            if vertices.size > 0:
+                renderer.setup_object(vertices, colors, normals) # Pass normals too
+                logger.info(f"Generated {vertices.size // 3} vertices for rendering")
+            else:
+                logger.error("No vertices generated during regeneration.")
+                renderer.setup_object(np.array([]), np.array([]), np.array([])) # Clear geometry
 
-    # Předání geometrie rendereru k vytvoření VBO/VAO
-    renderer.setup_object(vertices, colors)
+        except Exception as e:
+            logger.exception(f"Error regenerating tree '{tree_definition.name}': {e}")
+            renderer.setup_object(np.array([]), np.array([]), np.array([])) # Clear on error
 
-    # Výpis informací o používaných klávesách
-    logging.info("Controls: ESC - Exit, SPACE - Generate new tree, 1-6 - Select specific tree type")
-    
-    logging.info("Starting main loop...")
-    # Hlavní smyčka
+
+    # Generate the first tree
+    regenerate_tree(get_random_tree_type(), renderer)
+
+
+    logger.info("Starting main loop...")
     last_time = glfw.get_time()
     angle_y = 0.0
-    angle_x = math.radians(10) # Mírný náklon na začátku
+    angle_x = 0.0 # Start without tilt
 
     while not renderer.should_close():
         current_time = glfw.get_time()
         delta_time = current_time - last_time
         last_time = current_time
 
-        # Pomalé otáčení stromu pro ukázku
-        angle_y += 0.3 * delta_time # Rychlost otáčení
+        # Slow rotation
+        angle_y += 0.15 * delta_time # Slower rotation
 
-        # Výpočet modelové matice (otáčení)
         model_matrix = Matrix44.from_y_rotation(angle_y) * Matrix44.from_x_rotation(angle_x)
 
-        # Vykreslení scény
-        renderer.render(camera, model_matrix)
+        try:
+            renderer.render(camera, model_matrix)
+            renderer.swap_buffers()
+        except Exception as e:
+             logger.exception("Error during rendering loop.")
+             # Decide if error is fatal or can be skipped
+             # glfw.set_window_should_close(renderer.window, True) # Example: Exit on render error
 
-        # Výměna bufferů a zpracování událostí
-        renderer.swap_buffers()
-        renderer.poll_events()
+        renderer.poll_events() # Process input events
 
-        # Klávesové zkratky
+        # --- Input Handling ---
         if glfw.get_key(renderer.window, glfw.KEY_ESCAPE) == glfw.PRESS:
-            logging.info("ESC pressed, exiting...")
+            logger.info("ESC pressed, exiting.")
             glfw.set_window_should_close(renderer.window, True)
 
-        # Možnost znovu vygenerovat strom po stisku klávesy (mezerník)
+        # Regenerate random tree
         if glfw.get_key(renderer.window, glfw.KEY_SPACE) == glfw.PRESS:
-            logging.info("Regenerating random tree...")
-            tree_definition = get_random_tree_type()
-            regenerate_tree(tree_definition, renderer)
+             # Simple debounce: check if tree def changed recently? Or just allow rapid fire.
+             # For now, allow rapid fire.
+             regenerate_tree(get_random_tree_type(), renderer)
+             # Reset rotation? Optional. angle_y = 0.0
 
-        # Výběr konkrétního typu stromu klávesami 1-6
-        for i in range(6):
-            if glfw.get_key(renderer.window, glfw.KEY_1 + i) == glfw.PRESS and i < len(TREE_TYPES):
-                tree_class = TREE_TYPES[i]
-                tree_definition = tree_class()
-                logging.info(f"Selected specific tree type: '{tree_definition.name}'")
-                regenerate_tree(tree_definition, renderer)
-                break
+        # Select specific tree type (adjust range based on actual number of TREE_TYPES)
+        num_tree_types = len(TREE_TYPES)
+        for i in range(num_tree_types):
+            key = glfw.KEY_1 + i
+            if key <= glfw.KEY_9: # Check keys 1 through 9
+                 if glfw.get_key(renderer.window, key) == glfw.PRESS:
+                     selected_tree_def = TREE_TYPES[i]()
+                     # Regenerate only if the type is different from the current one
+                     if current_tree_def is None or selected_tree_def.name != current_tree_def.name:
+                         regenerate_tree(selected_tree_def, renderer)
+                         # angle_y = 0.0 # Reset rotation on type change
+                     break # Exit loop once a key is pressed
 
-    logging.info("Cleaning up...")
-    # Úklid po skončení smyčky
+        move_speed = 1.5 * delta_time
+        if glfw.get_key(renderer.window, glfw.KEY_W) == glfw.PRESS:
+            camera.position += camera.front * move_speed
+        if glfw.get_key(renderer.window, glfw.KEY_S) == glfw.PRESS:
+            camera.position += camera.back * move_speed
+        if glfw.get_key(renderer.window, glfw.KEY_A) == glfw.PRESS:
+            camera.position += camera.left * move_speed
+        if glfw.get_key(renderer.window, glfw.KEY_D) == glfw.PRESS:
+            camera.position += camera.right * move_speed
+        if glfw.get_key(renderer.window, glfw.KEY_Q) == glfw.PRESS:
+            camera.position += camera.down * move_speed
+        if glfw.get_key(renderer.window, glfw.KEY_E) == glfw.PRESS:
+            camera.position += camera.up * move_speed
+
+        # Update view matrix if camera moved/rotated (add rotation logic if needed)
+        if any(glfw.get_key(renderer.window, k) == glfw.PRESS for k in [glfw.KEY_W, glfw.KEY_S, glfw.KEY_A, glfw.KEY_D, glfw.KEY_Q, glfw.KEY_E]):
+            camera.update_view_matrix()
+
+
+    logger.info("Cleaning up resources...")
     renderer.cleanup()
-
-    # Ukončení GLFW
     glfw.terminate()
-    logging.info("Application exited cleanly.")
-
-
-def regenerate_tree(tree_definition, renderer):
-    """Pomocná funkce pro regeneraci stromu."""
-    lsystem = tree_definition.get_lsystem()
-    iterations = tree_definition.get_iterations()
-    lsystem.generate(iterations)
-    
-    logging.info(f"Generated L-system with {iterations} iterations")
-    logging.info(f"Parameters - angle: {math.degrees(lsystem.angle):.1f}°, scale: {lsystem.scale:.2f}")
-    logging.info(f"String length: {len(lsystem.current_string)} characters")
-    
-    # Nově předáváme normály do setup_object
-    vertices, colors, normals = lsystem.get_vertices()
-    if vertices.size > 0:
-        renderer.setup_object(vertices, colors, normals)
-        logging.info(f"Generated {vertices.size // 3} vertices for rendering")
-    else:
-        logging.error("No vertices generated during regeneration.")
-        renderer.setup_object(np.array([]), np.array([]), np.array([])) # Vyčistí VAO
+    logger.info("Application exited cleanly.")
 
 if __name__ == "__main__":
     main()

@@ -6,432 +6,255 @@ from .lsystem import LSystem
 
 class TreeDefinition(ABC):
     """Abstract base class for defining different tree types"""
-    
+
     @property
     @abstractmethod
-    def name(self):
+    def name(self) -> str:
         """Tree type name"""
         pass
-    
+
     @property
     @abstractmethod
-    def axiom(self):
-        """Starting axiom for L-system"""
-        pass
-    
-    @property
-    @abstractmethod
-    def rules(self):
+    def rules(self) -> dict:
         """Production rules for L-system"""
         pass
-    
+
     @property
     @abstractmethod
-    def iterations(self):
-        """Number of iterations to generate the tree"""
-        pass
-    
-    @property
-    @abstractmethod
-    def angle(self):
+    def angle(self) -> float:
         """Base angle for branches in degrees"""
         pass
-    
+
     @property
     @abstractmethod
-    def thickness_ratio(self):
-        """Ratio for branch thickness reduction"""
+    def base_length_ratio(self) -> float:
+        """Base length ratio influencing initial branch length relative to viewport height"""
         pass
-    
+
     @property
     @abstractmethod
-    def length_ratio(self):
-        """Ratio for branch length reduction"""
+    def trunk_color(self) -> tuple:
+        """Base trunk color in RGB format (0.0-1.0)"""
         pass
-    
+
     @property
     @abstractmethod
-    def random_angle_variation(self):
-        """Maximum random variation in angle (degrees)"""
+    def leaf_color(self) -> tuple | list[tuple]:
+        """Leaf color in RGB format or a list [min_color, max_color] for range"""
         pass
-    
+
     @property
-    @abstractmethod
-    def random_length_variation(self):
-        """Maximum random variation in length (proportion)"""
-        pass
-    
+    def axiom(self) -> str:
+        """Default axiom for all trees"""
+        return "X" # Starting with 'X' often encourages initial branching
+
     @property
-    @abstractmethod
-    def base_length(self):
-        """Base length of the trunk"""
-        pass
-    
+    def iterations(self) -> int:
+        """Default iterations - increased for density"""
+        return 5 # Default increased to 5
+
     @property
-    @abstractmethod
-    def base_thickness(self):
-        """Base thickness of the trunk"""
-        pass
-    
+    def scale(self) -> float:
+        """Default scale ratio for branch length reduction"""
+        return 0.75 # Slightly smaller scale can make trees bushier
+
     @property
-    @abstractmethod
-    def color(self):
-        """Trunk color in RGBA format"""
-        pass
-    
+    def initial_width(self) -> float:
+        """Initial width of the trunk base"""
+        return 0.5 # Default thicker trunk base
+
     def get_lsystem(self) -> LSystem:
-        """Returns an LSystem instance for this tree type with random variations."""
-        # Select a random rule from available options for each symbol
+        """Returns an LSystem instance for this tree type with consistent sizing."""
         selected_rules = {}
         for symbol, rule_options in self.rules.items():
             if isinstance(rule_options, list):
                 selected_rules[symbol] = random.choice(rule_options)
             else:
                 selected_rules[symbol] = rule_options
-        
-        # Apply random variations to angle
-        final_angle = math.radians(self.angle + random.uniform(-self.random_angle_variation, self.random_angle_variation))
-        
-        # Apply random variations to length
-        final_length = self.base_length * (1 + random.uniform(-self.random_length_variation, self.random_length_variation))
-        
-        # Create L-system with selected parameters
+
+        final_angle = math.radians(self.angle)
+
+        # Adjust initial length based on iterations for better consistency
+        # Trees with more iterations naturally become taller if length isn't adjusted
+        initial_length = 0.6 * self.base_length_ratio / (self.iterations * 0.8)
+
         lsystem = LSystem(
             axiom=self.axiom,
             rules=selected_rules,
             angle=final_angle,
-            scale=self.length_ratio,
-            initial_length=final_length,
-            initial_width=self.base_thickness,
-            trunk_color=self.color[:3]  # Only RGB components for trunk
+            scale=self.scale,
+            initial_length=initial_length,
+            initial_width=self.initial_width, # Pass initial width
+            trunk_color=self.trunk_color,
+            leaf_color=self.leaf_color
         )
-        
-        logging.info(f"Created {self.name} with angle={math.degrees(final_angle):.1f}°, scale={self.length_ratio:.2f}")
+
+        logging.info(f"Created {self.name} with angle={self.angle}°, base_length={initial_length:.3f}, initial_width={self.initial_width:.3f}, iterations={self.iterations}")
         return lsystem
-    
+
     def get_iterations(self) -> int:
         """Returns the number of iterations for this tree."""
         return self.iterations
-    
-    def get_properties(self) -> dict:
-        """Returns a dictionary of tree properties for display purposes."""
-        properties = {
-            "name": self.name,
-            "axiom": self.axiom,
-            "iterations": self.iterations,
-            "angle": self.angle,
-            "thickness_ratio": self.thickness_ratio,
-            "length_ratio": self.length_ratio,
-            "base_length": self.base_length,
-            "base_thickness": self.base_thickness,
-            "color": self.color
-        }
-        return properties
+
+# --- New Tree Definitions ---
+
+class FractalPlant(TreeDefinition):
+    """Classic fractal plant L-System"""
+    @property
+    def name(self): return "Fractal Plant"
+    @property
+    def rules(self): return {"X": "F+[[X]-X]-F[-FX]+X", "F": "FF"}
+    @property
+    def angle(self): return 25.0
+    @property
+    def base_length_ratio(self): return 0.45
+    @property
+    def trunk_color(self): return (0.4, 0.2, 0.1)
+    @property
+    def leaf_color(self): return (0.1, 0.7, 0.1)
+    @property
+    def iterations(self): return 5 # Needs more iterations
+    @property
+    def initial_width(self) -> float: return 0.04
+
+class SwampTree(TreeDefinition):
+    """A tree with downward and twisting branches, like a mangrove or swamp tree"""
+    @property
+    def name(self): return "Swamp Tree"
+    @property
+    def rules(self): return {
+        "X": "F[&X][\\X]F[/X]FX",
+        "F": ["FF", "F[&F]F", "F[\\F]F"] # Stochastic growth
+    }
+    @property
+    def angle(self): return 30.0
+    @property
+    def base_length_ratio(self): return 0.35
+    @property
+    def trunk_color(self): return (0.35, 0.25, 0.15)
+    @property
+    def leaf_color(self): return [(0.2, 0.4, 0.1), (0.4, 0.6, 0.2)] # Range of swampy greens
+    @property
+    def iterations(self): return 5
+    @property
+    def scale(self): return 0.8
+    @property
+    def initial_width(self) -> float: return 0.06
+
+class CrystalGrowth(TreeDefinition):
+    """Tree resembling crystal structures with sharp angles"""
+    @property
+    def name(self): return "Crystal Growth"
+    @property
+    def rules(self): return {
+        "X": "F[+X]F[-X]F[/X]F[\\X]FX", # More branching directions
+        "F": "F" # Keep branches thin
+    }
+    @property
+    def angle(self): return 45.0 # Sharper angles
+    @property
+    def base_length_ratio(self): return 0.25
+    @property
+    def trunk_color(self): return (0.6, 0.6, 0.8) # Bluish tint
+    @property
+    def leaf_color(self): return (0.8, 0.8, 1.0) # Light blue/white "crystals"
+    @property
+    def iterations(self): return 4 # Fewer iterations, structure is key
+    @property
+    def scale(self): return 0.7
+    @property
+    def initial_width(self) -> float: return 0.03
+
+class SpiralCanopy(TreeDefinition):
+    """Tree with branches that spiral upwards and form a canopy"""
+    @property
+    def name(self): return "Spiral Canopy"
+    @property
+    def rules(self): return {
+        "X": "F/[+FX][^FX]F[\\-FX]FX", # Rotate around multiple axes
+        "F": "FF"
+    }
+    @property
+    def angle(self): return 22.5
+    @property
+    def base_length_ratio(self): return 0.40
+    @property
+    def trunk_color(self): return (0.5, 0.3, 0.1)
+    @property
+    def leaf_color(self): return [(0.1, 0.5, 0.1), (0.3, 0.8, 0.2)] # Lush green range
+    @property
+    def iterations(self): return 5
+    @property
+    def scale(self): return 0.8
+    @property
+    def initial_width(self) -> float: return 0.055
+
+class SakuraBlossom(TreeDefinition):
+    """Inspired by cherry blossoms, more 'X' (leaves/flowers) at the end"""
+    @property
+    def name(self): return "Sakura Blossom"
+    @property
+    def rules(self): return {
+        "X": "F[+X][-X]FX",
+        "F": ["FF", "F[+F-X][-F+X]F"] # Encourage 'X' at branch ends
+    }
+    @property
+    def angle(self): return 28.0
+    @property
+    def base_length_ratio(self): return 0.38
+    @property
+    def trunk_color(self): return (0.45, 0.3, 0.25)
+    @property
+    def leaf_color(self): return [(0.9, 0.7, 0.8), (1.0, 0.8, 0.9)] # Pinkish range
+    @property
+    def iterations(self): return 5
+    @property
+    def scale(self): return 0.78
+    @property
+    def initial_width(self) -> float: return 0.045
 
 
-class StandardTree(TreeDefinition):
-    """Definition of a standard tree"""
-    
+class DenseConifer(TreeDefinition):
+    """A dense conifer-like tree"""
     @property
-    def name(self):
-        return "Standard Tree"
-    
+    def name(self): return "Dense Conifer"
     @property
-    def axiom(self):
-        return "X"
-    
+    def rules(self): return {
+        "X": "F-[[X]+X]+F[+FX]-X",
+        "F": "FF"
+    }
     @property
-    def rules(self):
-        return {
-            "X": [
-                "F-[[X]+X]+F[+FX]-X",
-                "F[+X]F[-X]+X",
-                "F[/X][\\X]F[^X]&X",
-                "F[&X][^X]F[+X]-X"
-            ],
-            "F": ["FF", "F"]
-        }
-    
+    def angle(self): return 25.7
     @property
-    def iterations(self):
-        return random.randint(3, 4)
-    
+    def base_length_ratio(self): return 0.42
     @property
-    def angle(self):
-        return random.uniform(20.0, 30.0)
-    
+    def trunk_color(self): return (0.3, 0.15, 0.05)
     @property
-    def thickness_ratio(self):
-        return random.uniform(0.75, 0.85)
-    
+    def leaf_color(self): return (0.0, 0.5, 0.1) # Dark green
     @property
-    def length_ratio(self):
-        return random.uniform(0.75, 0.85)
-    
+    def iterations(self): return 6 # More iterations for density
     @property
-    def random_angle_variation(self):
-        return 1.0
-    
+    def scale(self): return 0.75
     @property
-    def random_length_variation(self):
-        return 0.1
-    
-    @property
-    def base_length(self):
-        return random.uniform(0.08, 0.12)
-    
-    @property
-    def base_thickness(self):
-        return random.uniform(0.02, 0.04)
-    
-    @property
-    def color(self):
-        return [0.65, 0.35, 0.15, 1.0]
+    def initial_width(self) -> float: return 0.06
 
 
-class BushyTree(TreeDefinition):
-    """Definition of a bushy tree"""
-    
-    @property
-    def name(self):
-        return "Bushy Tree"
-    
-    @property
-    def axiom(self):
-        return "F"
-    
-    @property
-    def rules(self):
-        return {
-            "F": [
-                "F[+F][-F][/F][\\F]F",
-                "FF-[-F+F+F]+[+F-F-F]",
-                "F[&F][^F]F[+F]-F"
-            ]
-        }
-    
-    @property
-    def iterations(self):
-        return random.randint(3, 4)
-    
-    @property
-    def angle(self):
-        return random.uniform(22.0, 35.0)
-    
-    @property
-    def thickness_ratio(self):
-        return random.uniform(0.8, 0.9)
-    
-    @property
-    def length_ratio(self):
-        return random.uniform(0.8, 0.9)
-    
-    @property
-    def random_angle_variation(self):
-        return 1.0
-    
-    @property
-    def random_length_variation(self):
-        return 0.1
-    
-    @property
-    def base_length(self):
-        return random.uniform(0.06, 0.1)
-    
-    @property
-    def base_thickness(self):
-        return random.uniform(0.02, 0.04)
-    
-    @property
-    def color(self):
-        return [0.47, 0.35, 0.2, 1.0]
-
-
-class WeepingTree(TreeDefinition):
-    """Definition of a weeping tree"""
-    
-    @property
-    def name(self):
-        return "Weeping Tree"
-    
-    @property
-    def axiom(self):
-        return "F"
-    
-    @property
-    def rules(self):
-        return {
-            "F": [
-                "F[+&F][-&F][/&F][\\&F]F",
-                "FF[+&F][-&F]F",
-                "F[\\&F][/&F]F"
-            ]
-        }
-    
-    @property
-    def iterations(self):
-        return random.randint(3, 4)
-    
-    @property
-    def angle(self):
-        return random.uniform(15.0, 25.0)
-    
-    @property
-    def thickness_ratio(self):
-        return random.uniform(0.8, 0.9)
-    
-    @property
-    def length_ratio(self):
-        return random.uniform(0.8, 0.9)
-    
-    @property
-    def random_angle_variation(self):
-        return 1.5
-    
-    @property
-    def random_length_variation(self):
-        return 0.1
-    
-    @property
-    def base_length(self):
-        return random.uniform(0.1, 0.15)
-    
-    @property
-    def base_thickness(self):
-        return random.uniform(0.02, 0.04)
-    
-    @property
-    def color(self):
-        return [0.6, 0.35, 0.2, 1.0]
-
-
-class BirchTree(TreeDefinition):
-    """Definition of a birch tree"""
-    
-    @property
-    def name(self):
-        return "Birch Tree"
-    
-    @property
-    def axiom(self):
-        return "F"
-    
-    @property
-    def rules(self):
-        return {
-            "F": [
-                "F[+F]F[-F]F",
-                "F[+F]F",
-                "F[-F]F"
-            ]
-        }
-    
-    @property
-    def iterations(self):
-        return random.randint(3, 4)
-    
-    @property
-    def angle(self):
-        return random.uniform(20.0, 25.0)
-    
-    @property
-    def thickness_ratio(self):
-        return random.uniform(0.75, 0.85)
-    
-    @property
-    def length_ratio(self):
-        return random.uniform(0.75, 0.85)
-    
-    @property
-    def random_angle_variation(self):
-        return 1.0
-    
-    @property
-    def random_length_variation(self):
-        return 0.1
-    
-    @property
-    def base_length(self):
-        return random.uniform(0.2, 0.3)
-    
-    @property
-    def base_thickness(self):
-        return random.uniform(0.02, 0.04)
-    
-    @property
-    def color(self):
-        return [0.9, 0.88, 0.8, 1.0]
-
-
-class PineTree(TreeDefinition):
-    """Definition of a pine tree"""
-    
-    @property
-    def name(self):
-        return "Pine Tree"
-    
-    @property
-    def axiom(self):
-        return "F"
-    
-    @property
-    def rules(self):
-        return {
-            "F": [
-                "FF-[-F+F+F]",
-                "[+F-F-F]",
-                "FF+[+F-F-F]",
-                "[-F+F+F]"
-            ]
-        }
-    
-    @property
-    def iterations(self):
-        return random.randint(3, 4)
-    
-    @property
-    def angle(self):
-        return random.uniform(22.0, 25.0)
-    
-    @property
-    def thickness_ratio(self):
-        return random.uniform(0.65, 0.75)
-    
-    @property
-    def length_ratio(self):
-        return random.uniform(0.65, 0.75)
-    
-    @property
-    def random_angle_variation(self):
-        return 1.0
-    
-    @property
-    def random_length_variation(self):
-        return 0.05
-    
-    @property
-    def base_length(self):
-        return random.uniform(0.3, 0.4)
-    
-    @property
-    def base_thickness(self):
-        return random.uniform(0.03, 0.05)
-    
-    @property
-    def color(self):
-        return [0.38, 0.2, 0.12, 1.0]
-
-
-# List of available tree types
-TREE_TYPES = [StandardTree, BushyTree, WeepingTree, BirchTree, PineTree]
+# List of available tree types - Updated with new classes
+TREE_TYPES = [
+    FractalPlant,
+    SwampTree,
+    CrystalGrowth,
+    SpiralCanopy,
+    SakuraBlossom,
+    DenseConifer
+]
 
 def get_random_tree_type() -> TreeDefinition:
     """Returns an instance of a randomly selected tree type."""
     chosen_type = random.choice(TREE_TYPES)
-    tree = chosen_type()  # Create instance of the selected class
+    tree = chosen_type()
     logging.info(f"Selected tree type: {tree.name}")
     return tree
-
 
 def get_tree_by_name(name: str) -> TreeDefinition:
     """Returns a tree instance by name."""
@@ -440,7 +263,7 @@ def get_tree_by_name(name: str) -> TreeDefinition:
         if tree_instance.name.lower() == name.lower():
             logging.info(f"Created tree by name: {name}")
             return tree_instance
-    
-    # If we don't find a tree with the given name, return the standard tree
-    logging.warning(f"Unknown tree type: {name}, using StandardTree")
-    return StandardTree()
+
+    # Fallback to a default if name not found
+    logging.warning(f"Unknown tree type: '{name}', using random tree.")
+    return get_random_tree_type() # Return random instead of a fixed default
