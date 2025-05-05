@@ -61,7 +61,7 @@ class TreeDefinition(ABC):
     @property
     def initial_width(self) -> float:
         """Initial width of the trunk base"""
-        return 0.5 # Default thicker trunk base
+        return 5.5 # Default thicker trunk base
 
     def get_lsystem(self) -> LSystem:
         """Returns an LSystem instance for this tree type with consistent sizing."""
@@ -253,7 +253,6 @@ def get_random_tree_type() -> TreeDefinition:
     """Returns an instance of a randomly selected tree type."""
     chosen_type = random.choice(TREE_TYPES)
     tree = chosen_type()
-    logging.info(f"Selected tree type: {tree.name}")
     return tree
 
 def get_tree_by_name(name: str) -> TreeDefinition:

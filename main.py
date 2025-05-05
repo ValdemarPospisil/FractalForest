@@ -62,7 +62,9 @@ def main():
             return
 
         current_tree_def = tree_definition # Store current definition
-        logger.info(f"--- Regenerating tree: '{tree_definition.name}' ---")
+        print("------------------------------------------------------------------------------------------------")
+        print(" ")
+        logger.info(f"Regenerating tree: {tree_definition.name}")
         try:
             lsystem = tree_definition.get_lsystem()
             iterations = tree_definition.get_iterations()
@@ -139,24 +141,39 @@ def main():
                          # angle_y = 0.0 # Reset rotation on type change
                      break # Exit loop once a key is pressed
 
-        move_speed = 1.5 * delta_time
+        
+        # Ovládání kamery s novým systémem pohybu
+        move_speed = 1 * delta_time
+        camera_moved = False
+        
+        # Pohyb dopředu/dozadu - posun kamery a cíl stejným směrem
         if glfw.get_key(renderer.window, glfw.KEY_W) == glfw.PRESS:
-            camera.position += camera.front * move_speed
+            camera.move(camera.front, move_speed)
+            camera_moved = True
         if glfw.get_key(renderer.window, glfw.KEY_S) == glfw.PRESS:
-            camera.position += camera.back * move_speed
+            camera.move(camera.back, move_speed)
+            camera_moved = True
+            
+        # Pohyb doleva/doprava - posun kamery a cíl stejným směrem
         if glfw.get_key(renderer.window, glfw.KEY_A) == glfw.PRESS:
-            camera.position += camera.left * move_speed
+            camera.move(camera.left, move_speed)
+            camera_moved = True
         if glfw.get_key(renderer.window, glfw.KEY_D) == glfw.PRESS:
-            camera.position += camera.right * move_speed
+            camera.move(camera.right, move_speed)
+            camera_moved = True
+            
+        # Pohyb nahoru/dolů - posun kamery a cíl stejným směrem
         if glfw.get_key(renderer.window, glfw.KEY_Q) == glfw.PRESS:
-            camera.position += camera.down * move_speed
+            camera.move(camera.down, move_speed)
+            camera_moved = True
         if glfw.get_key(renderer.window, glfw.KEY_E) == glfw.PRESS:
-            camera.position += camera.up * move_speed
-
-        # Update view matrix if camera moved/rotated (add rotation logic if needed)
-        if any(glfw.get_key(renderer.window, k) == glfw.PRESS for k in [glfw.KEY_W, glfw.KEY_S, glfw.KEY_A, glfw.KEY_D, glfw.KEY_Q, glfw.KEY_E]):
+            camera.move(camera.up, move_speed)
+            camera_moved = True
+            
+        # Pokud se pohybovala kamera, aktualizujeme view matici
+        if camera_moved:
             camera.update_view_matrix()
-
+            logger.debug(f"Camera moved to position {camera.position}, looking at {camera.target}")
 
     logger.info("Cleaning up resources...")
     renderer.cleanup()
