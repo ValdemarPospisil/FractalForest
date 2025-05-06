@@ -10,6 +10,7 @@ import numpy as np
 from engine.renderer import Renderer 
 from engine.camera import Camera    
 from generation.tree import get_random_tree_type, get_tree_by_name, TREE_TYPES
+from generation.forest import ForestGenerator  # Nový import pro generování lesa
 
 
 
@@ -53,17 +54,30 @@ def main():
     # Display available tree types
     available_trees = [tree_cls().name for tree_cls in TREE_TYPES]
     logger.info(f"Available tree types ({len(available_trees)}): {', '.join(available_trees)}")
-    logger.info("Controls: ESC=Exit, SPACE=New Random Tree, 1-%d=Select Specific Tree", len(TREE_TYPES))
+    logger.info("Controls: ESC=Exit, SPACE=New Random Tree, 1-%d=Select Specific Tree, F=Generate Forest", len(TREE_TYPES))
 
 
     # Initial tree generation
     current_tree_def = None
+    forest_generator = None
+    forest_mode = False  # Nový příznak pro režim lesa
+    forest_density = 0.5  # Výchozí hustota lesa
+    forest_area_size = 20.0  # Výchozí velikost oblasti lesa
+    
     def regenerate_tree(tree_definition, renderer):
         """Pomocná funkce pro regeneraci stromu."""
-        nonlocal current_tree_def
+        nonlocal current_tree_def, forest_mode
         if tree_definition is None:
             logger.error("Cannot regenerate tree, definition is None.")
             return
+
+        # Přepnutí do režimu jednoho stromu
+        forest_mode = False
+        
+        # Vymazání všech stromů lesa
+        if forest_generator and hasattr(forest_generator, 'trees'):
+            for i in range(len(forest_generator.trees)):
+                renderer.setup_object(np.array([]), np.array([]), np.array([]), object_id=f"tree_{i}")
 
         current_tree_def = tree_definition # Store current definition
         print("------------------------------------------------------------------------------------------------")
@@ -91,6 +105,58 @@ def main():
             logger.exception(f"Error regenerating tree '{tree_definition.name}': {e}")
             renderer.setup_object(np.array([]), np.array([]), np.array([]), object_id="tree") # Clear on error
 
+    def generate_forest():
+        """Pomocná funkce pro generování lesa."""
+        nonlocal forest_generator, forest_mode, current_tree_def
+        
+        # Přepnutí do režimu lesa
+        forest_mode = True
+        
+        # Vymazání strom v režimu jednoho stromu
+        renderer.setup_object(np.array([]), np.array([]), np.array([]), object_id="tree")
+        current_tree_def = None
+        
+        print("------------------------------------------------------------------------------------------------")
+        print(" ")
+        logger.info(f"Generating forest with density {forest_density:.2f} in area size {forest_area_size:.1f}")
+        
+        try:
+            # Vytvoříme generátor lesa, pokud ještě není
+            if forest_generator is None:
+                forest_generator = ForestGenerator(
+                    renderer,
+                    area_size=forest_area_size,
+                    density=forest_density,
+                    min_trees=15,
+                    max_trees=35,
+                    min_distance=1.0
+                )
+            else:
+                # Aktualizace parametrů
+                forest_generator.area_size = forest_area_size
+                forest_generator.density = forest_density
+            
+            # Generování a vykreslení lesa
+            forest_generator.generate_forest()
+            forest_generator.render_forest()
+            
+            # Získání informace o vygenerovaném lese
+            if hasattr(forest_generator, 'trees'):
+                tree_types = [t[0].name for t in forest_generator.trees]
+                type_counts = {}
+                for t in tree_types:
+                    if t in type_counts:
+                        type_counts[t] += 1
+                    else:
+                        type_counts[t] = 1
+                
+                logger.info(f"Generated forest with {len(forest_generator.trees)} trees:")
+                for tree_type, count in type_counts.items():
+                    logger.info(f"  - {tree_type}: {count} trees")
+            
+        except Exception as e:
+            logger.exception(f"Error generating forest: {e}")
+
 
     # Generate the first tree
     regenerate_tree(get_random_tree_type(), renderer)
@@ -100,14 +166,20 @@ def main():
     last_time = glfw.get_time()
     angle_y = 0.0
     angle_x = 0.0 # Start without tilt
+    
+    # Pro ovládání hustoty lesa a velikosti oblasti
+    forest_density_changing = False
+    forest_area_changing = False
+    key_f_last_state = glfw.RELEASE
 
     while not renderer.should_close():
         current_time = glfw.get_time()
         delta_time = current_time - last_time
         last_time = current_time
 
-        # Slow rotation
-        angle_y += 0.15 * delta_time # Slower rotation
+        # Slow rotation - pouze pro jeden strom
+        if not forest_mode:
+            angle_y += 0.15 * delta_time # Slower rotation
 
         model_matrix = Matrix44.from_y_rotation(angle_y) * Matrix44.from_x_rotation(angle_x)
 
@@ -146,6 +218,42 @@ def main():
                          # angle_y = 0.0 # Reset rotation on type change
                      break # Exit loop once a key is pressed
 
+        # --- Nové ovládání pro generování lesa ---
+        # Generování lesa po stisknutí F
+        key_f_current_state = glfw.get_key(renderer.window, glfw.KEY_F)
+        if key_f_current_state == glfw.PRESS and key_f_last_state == glfw.RELEASE:
+            generate_forest()
+        key_f_last_state = key_f_current_state
+        
+        # Ovládání hustoty lesa
+        if glfw.get_key(renderer.window, glfw.KEY_LEFT_BRACKET) == glfw.PRESS:  # [ pro snížení hustoty
+            forest_density = max(0.1, forest_density - 0.05)
+            forest_density_changing = True
+            logger.debug(f"Forest density decreased to {forest_density:.2f}")
+        elif glfw.get_key(renderer.window, glfw.KEY_RIGHT_BRACKET) == glfw.PRESS:  # ] pro zvýšení hustoty
+            forest_density = min(1.0, forest_density + 0.05)
+            forest_density_changing = True
+            logger.debug(f"Forest density increased to {forest_density:.2f}")
+        elif forest_density_changing:
+            forest_density_changing = False
+            logger.info(f"Forest density set to {forest_density:.2f}")
+            if forest_mode:
+                generate_forest()  # Regenerovat les s novou hustotou
+        
+        # Ovládání velikosti oblasti lesa
+        if glfw.get_key(renderer.window, glfw.KEY_MINUS) == glfw.PRESS:  # - pro zmenšení oblasti
+            forest_area_size = max(10.0, forest_area_size - 1.0)
+            forest_area_changing = True
+            logger.debug(f"Forest area decreased to {forest_area_size:.1f}")
+        elif glfw.get_key(renderer.window, glfw.KEY_EQUAL) == glfw.PRESS:  # = pro zvětšení oblasti
+            forest_area_size = min(40.0, forest_area_size + 1.0)
+            forest_area_changing = True
+            logger.debug(f"Forest area increased to {forest_area_size:.1f}")
+        elif forest_area_changing:
+            forest_area_changing = False
+            logger.info(f"Forest area size set to {forest_area_size:.1f}")
+            if forest_mode:
+                generate_forest()  # Regenerovat les s novou velikostí oblasti
         
         # Ovládání kamery s novým systémem pohybu
         move_speed = 1 * delta_time
