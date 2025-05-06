@@ -61,7 +61,7 @@ class TreeDefinition(ABC):
     @property
     def initial_width(self) -> float:
         """Initial width of the trunk base"""
-        return 5.5 # Default thicker trunk base
+        return 0.05 # Default thicker trunk base
 
     def get_lsystem(self) -> LSystem:
         """Returns an LSystem instance for this tree type with consistent sizing."""
@@ -96,26 +96,26 @@ class TreeDefinition(ABC):
         """Returns the number of iterations for this tree."""
         return self.iterations
 
-# --- New Tree Definitions ---
+# --- UPRAVENÉ Stávající typy stromů ---
 
 class FractalPlant(TreeDefinition):
-    """Classic fractal plant L-System"""
+    """Classic fractal plant L-System - upraveno pro lepší vyvážení"""
     @property
     def name(self): return "Fractal Plant"
     @property
     def rules(self): return {"X": "F+[[X]-X]-F[-FX]+X", "F": "FF"}
     @property
-    def angle(self): return 25.0
+    def angle(self): return 22.0  # Menší úhel pro menší rozpětí
     @property
-    def base_length_ratio(self): return 0.45
+    def base_length_ratio(self): return 0.3  # Zmenšeno pro menší výšku
     @property
     def trunk_color(self): return (0.4, 0.2, 0.1)
     @property
     def leaf_color(self): return (0.1, 0.7, 0.1)
     @property
-    def iterations(self): return 5 # Needs more iterations
+    def iterations(self): return 5
     @property
-    def initial_width(self) -> float: return 0.04
+    def initial_width(self) -> float: return 0.06  # Tlustší kmen
 
 class SwampTree(TreeDefinition):
     """A tree with downward and twisting branches, like a mangrove or swamp tree"""
@@ -166,7 +166,7 @@ class CrystalGrowth(TreeDefinition):
     def initial_width(self) -> float: return 0.03
 
 class SpiralCanopy(TreeDefinition):
-    """Tree with branches that spiral upwards and form a canopy"""
+    """Tree with branches that spiral upwards and form a canopy - upraveno pro menší výšku"""
     @property
     def name(self): return "Spiral Canopy"
     @property
@@ -175,47 +175,46 @@ class SpiralCanopy(TreeDefinition):
         "F": "FF"
     }
     @property
-    def angle(self): return 22.5
+    def angle(self): return 25.0  # Zvětšený úhel pro širší korunu
     @property
-    def base_length_ratio(self): return 0.40
+    def base_length_ratio(self): return 0.3  # Zmenšeno pro nižší výšku
     @property
     def trunk_color(self): return (0.5, 0.3, 0.1)
     @property
     def leaf_color(self): return [(0.1, 0.5, 0.1), (0.3, 0.8, 0.2)] # Lush green range
     @property
-    def iterations(self): return 5
+    def iterations(self): return 5  
     @property
-    def scale(self): return 0.8
+    def scale(self): return 0.75  # Menší měřítko pro hustší korunu
     @property
-    def initial_width(self) -> float: return 0.055
+    def initial_width(self) -> float: return 0.06  # Tlustší kmen
 
 class SakuraBlossom(TreeDefinition):
-    """Inspired by cherry blossoms, more 'X' (leaves/flowers) at the end"""
+    """Sakura strom s hustší korunou"""
     @property
     def name(self): return "Sakura Blossom"
     @property
     def rules(self): return {
-        "X": "F[+X][-X]FX",
-        "F": ["FF", "F[+F-X][-F+X]F"] # Encourage 'X' at branch ends
+        "X": ["F[++X][--X][-X][+X]FX", "F[-X][+X][--X][++X]FX"],  # Více větví s různými úhly
+        "F": ["FF", "F[+F-X][-F+X]F[^FX][&FX]"] # Přidané větvení do více směrů
     }
     @property
-    def angle(self): return 28.0
+    def angle(self): return 20.0  # Menší úhel pro hustší korunu
     @property
-    def base_length_ratio(self): return 0.38
+    def base_length_ratio(self): return 0.28  # Kratší větve pro hustější vzhled
     @property
     def trunk_color(self): return (0.45, 0.3, 0.25)
     @property
     def leaf_color(self): return [(0.9, 0.7, 0.8), (1.0, 0.8, 0.9)] # Pinkish range
     @property
-    def iterations(self): return 5
+    def iterations(self): return 4  # Méně iterací, ale hustší pravidla
     @property
-    def scale(self): return 0.78
+    def scale(self): return 0.82  # Pomalejší zmenšování větví
     @property
-    def initial_width(self) -> float: return 0.045
-
+    def initial_width(self) -> float: return 0.055
 
 class DenseConifer(TreeDefinition):
-    """A dense conifer-like tree"""
+    """A dense conifer-like tree - upraveno pro lepší proporce"""
     @property
     def name(self): return "Dense Conifer"
     @property
@@ -224,20 +223,165 @@ class DenseConifer(TreeDefinition):
         "F": "FF"
     }
     @property
-    def angle(self): return 25.7
+    def angle(self): return 22.0  # Menší úhel
     @property
-    def base_length_ratio(self): return 0.42
+    def base_length_ratio(self): return 0.32  # Zmenšená výška
     @property
     def trunk_color(self): return (0.3, 0.15, 0.05)
     @property
     def leaf_color(self): return (0.0, 0.5, 0.1) # Dark green
     @property
-    def iterations(self): return 6 # More iterations for density
+    def iterations(self): return 5  # Méně iterací pro menší výšku
     @property
-    def scale(self): return 0.75
+    def scale(self): return 0.78  # Pomalejší zmenšování pro hustší vzhled
     @property
     def initial_width(self) -> float: return 0.06
 
+# ---- NOVÉ TYPY STROMŮ ----
+
+class OakTree(TreeDefinition):
+    """Klasický dub s širokou, rozložitou korunou"""
+    @property
+    def name(self): return "Oak Tree"
+    @property
+    def rules(self): return {
+        "X": ["F[+++X][---X][+X][-X]FX", "F[++X][--X]FX"],
+        "F": ["FF", "F[+F]F[-F]F"] 
+    }
+    @property
+    def angle(self): return 25.0
+    @property
+    def base_length_ratio(self): return 0.35
+    @property
+    def trunk_color(self): return (0.35, 0.2, 0.1)
+    @property
+    def leaf_color(self): return [(0.2, 0.5, 0.1), (0.3, 0.6, 0.15)]
+    @property
+    def iterations(self): return 4
+    @property
+    def scale(self): return 0.8
+    @property
+    def initial_width(self) -> float: return 0.07  # Silný kmen
+
+class PineTree(TreeDefinition):
+    """Borovice s charakteristickým tvarem"""
+    @property
+    def name(self): return "Pine Tree"
+    @property
+    def rules(self): return {
+        "X": "F[++FX][--FX][-FX][+FX]FX",
+        "F": "FF"
+    }
+    @property
+    def angle(self): return 18.0
+    @property
+    def base_length_ratio(self): return 0.4
+    @property
+    def trunk_color(self): return (0.3, 0.15, 0.05)
+    @property
+    def leaf_color(self): return (0.0, 0.45, 0.05)
+    @property
+    def iterations(self): return 4
+    @property
+    def scale(self): return 0.85
+    @property
+    def initial_width(self) -> float: return 0.055
+
+class BirchTree(TreeDefinition):
+    """Bříza s tenčím kmenem a jemnými větvemi"""
+    @property
+    def name(self): return "Birch Tree"
+    @property
+    def rules(self): return {
+        "X": "F[-X][+X][^X][&X]FX",
+        "F": ["FF", "F[-F][+F]F"]
+    }
+    @property
+    def angle(self): return 27.0
+    @property
+    def base_length_ratio(self): return 0.38
+    @property
+    def trunk_color(self): return (0.95, 0.95, 0.95)  # Téměř bílá
+    @property
+    def leaf_color(self): return [(0.4, 0.8, 0.1), (0.6, 0.9, 0.2)]
+    @property
+    def iterations(self): return 4
+    @property
+    def scale(self): return 0.8
+    @property
+    def initial_width(self) -> float: return 0.04  # Tenčí kmen
+
+class MapleTree(TreeDefinition):
+    """Javor s charakteristickou širokou korunou"""
+    @property
+    def name(self): return "Maple Tree"
+    @property
+    def rules(self): return {
+        "X": ["F[+++X][---X][+X][-X][^X][&X]FX", "F[++X][--X][&X][^X]FX"],
+        "F": ["FF", "F[+F][-F]F"]
+    }
+    @property
+    def angle(self): return 23.0
+    @property
+    def base_length_ratio(self): return 0.3
+    @property
+    def trunk_color(self): return (0.4, 0.25, 0.15)
+    @property
+    def leaf_color(self): return [(0.7, 0.2, 0.1), (0.8, 0.3, 0.0)]  # Podzimní červená
+    @property
+    def iterations(self): return 4
+    @property
+    def scale(self): return 0.78
+    @property
+    def initial_width(self) -> float: return 0.06
+
+class WillowTree(TreeDefinition):
+    """Vrba s charakteristickými převislými větvemi"""
+    @property
+    def name(self): return "Willow Tree"
+    @property
+    def rules(self): return {
+        "X": "F[&&&X][\\\\X][//X][&X]FX",
+        "F": ["FF", "F[&F]F"]
+    }
+    @property
+    def angle(self): return 28.0
+    @property
+    def base_length_ratio(self): return 0.35
+    @property
+    def trunk_color(self): return (0.3, 0.2, 0.1)
+    @property
+    def leaf_color(self): return (0.6, 0.8, 0.2)
+    @property
+    def iterations(self): return 4
+    @property
+    def scale(self): return 0.82
+    @property
+    def initial_width(self) -> float: return 0.06
+
+class DeadTree(TreeDefinition):
+    """Uschlý strom bez listí"""
+    @property
+    def name(self): return "Dead Tree"
+    @property
+    def rules(self): return {
+        "X": "F[+X][-X][\\X][/X]X",
+        "F": ["FF", "F[+F][-F]F"]
+    }
+    @property
+    def angle(self): return 30.0
+    @property
+    def base_length_ratio(self): return 0.32
+    @property
+    def trunk_color(self): return (0.3, 0.25, 0.2)
+    @property
+    def leaf_color(self): return (0.4, 0.35, 0.3)  # Bez listů, jen suché větve
+    @property
+    def iterations(self): return 4
+    @property
+    def scale(self): return 0.78
+    @property
+    def initial_width(self) -> float: return 0.055
 
 # List of available tree types - Updated with new classes
 TREE_TYPES = [
@@ -246,7 +390,13 @@ TREE_TYPES = [
     CrystalGrowth,
     SpiralCanopy,
     SakuraBlossom,
-    DenseConifer
+    DenseConifer,
+    OakTree,
+    PineTree,
+    BirchTree,
+    MapleTree,
+    WillowTree,
+    DeadTree
 ]
 
 def get_random_tree_type() -> TreeDefinition:

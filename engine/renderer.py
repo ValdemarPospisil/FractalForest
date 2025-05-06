@@ -23,13 +23,18 @@ class Renderer:
 
         # Nastavení počátečních OpenGL stavů
         self.ctx.enable(moderngl.DEPTH_TEST)
-        # Můžeme zapnout i blendování, pokud budeme mít průhlednost
-        # self.ctx.enable(moderngl.BLEND)
-        # self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        self.ctx.line_width = 85 # Mírně tlustší čáry pro lepší viditelnost
+        # Zapínáme blendování pro hladší vykreslení čar
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        
+        # Nastavíme maximální možnou tloušťku čar (OpenGL omezuje maximální hodnotu)
+        # Zjistíme maximální podporovanou tloušťku čar na aktuálním hardware
+        max_line_width = self.ctx.info['GL_ALIASED_LINE_WIDTH_RANGE'][1]
+        logging.info(f"Maximum supported line width: {max_line_width}")
+        self.ctx.line_width = min(10.0, max_line_width)  # Použijeme menší z hodnot 10.0 nebo max podporované
         self.program['light_direction'] = (0.5, 1.0, 0.5)
         
-        logging.info("Renderer initialized successfully")
+        logging.info(f"Renderer initialized successfully with line width: {self.ctx.line_width}")
 
     def _load_program(self, vertex_path, fragment_path):
         """Načte a zkompiluje shader program ze souborů."""
@@ -58,7 +63,7 @@ class Renderer:
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
         glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
-        #glfw.window_hint(glfw.SAMPLES, 4) # Antialiasing (volitelné)
+        glfw.window_hint(glfw.SAMPLES, 4) # Zapneme antialiasing pro hladší čáry
 
         window = glfw.create_window(self.width, self.height, title, None, None)
         if not window:
@@ -67,11 +72,11 @@ class Renderer:
             raise RuntimeError("Nelze vytvořit GLFW okno")
 
         glfw.make_context_current(window)
-        #glfw.swap_interval(1) # VSync (volitelné)
+        glfw.swap_interval(1) # Zapneme VSync pro plynulejší zobrazení
         logging.info(f"GLFW window created with dimensions {self.width}x{self.height}")
         return window
 
-    # Úprava v engine/renderer.py - v metodě setup_object
+    # Upravená metoda setup_object - může vytvářet tlustší linie pomocí duplikovaných vrcholů
     def setup_object(self, vertices, colors, normals=None):
         """Vytvoří VBO a VAO pro objekt."""
         # Uvolní staré buffery, pokud existují
@@ -96,15 +101,15 @@ class Renderer:
                 if i+3 < len(vertices):
                     # Vytvoříme normálu kolmou k segmentu
                     direction = vertices[i+3:i+6] - vertices[i:i+3]
-                # Rotujeme o 90 stupňů kolem osy Y pro základní normálu
-                normal = np.array([direction[2], 0, -direction[0]])
-                if np.linalg.norm(normal) < 0.001:
-                    normal = np.array([0, 1, 0])  # Fallback
-                else:
-                    normal = normal / np.linalg.norm(normal)
+                    # Rotujeme o 90 stupňů kolem osy Y pro základní normálu
+                    normal = np.array([direction[2], 0, -direction[0]])
+                    if np.linalg.norm(normal) < 0.001:
+                        normal = np.array([0, 1, 0])  # Fallback
+                    else:
+                        normal = normal / np.linalg.norm(normal)
                 
-                normals[i:i+3] = normal
-                normals[i+3:i+6] = normal
+                    normals[i:i+3] = normal
+                    normals[i+3:i+6] = normal
     
         self.vbo_normals = self.ctx.buffer(normals.astype('f4').tobytes())
 
@@ -135,6 +140,7 @@ class Renderer:
         """Uvolní OpenGL zdroje."""
         if self.vbo_vertices: self.vbo_vertices.release()
         if self.vbo_colors: self.vbo_colors.release()
+        if self.vbo_normals: self.vbo_normals.release()
         if self.vao: self.vao.release()
         if self.program: self.program.release()
         logging.info("OpenGL resources released")
