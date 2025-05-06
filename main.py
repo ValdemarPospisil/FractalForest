@@ -37,11 +37,15 @@ def main():
         renderer = Renderer(width=1366, height=768, title="Procedural L-System Forest") # Larger window
         camera = Camera(renderer.width, renderer.height)
 
-        camera.position = np.array([0.0, 0.5, 2.5]) # Further back, slightly higher
-        #camera.target = np.array([0.0, 1.0, 0.0])   # Aim towards base/mid trunk
+        # Nastavíme kameru trochu výš a dál, aby byla vidět i zem
+        camera.position = np.array([0.0, 1.0, 4.0]) # Vyšší a dále
         camera.update_view_matrix()
         logger.info("Renderer and Camera initialized.")
         logger.info(f"Camera positioned at {camera.position}, looking at {camera.target}")
+        
+        # Vytvoříme širokou zem (velikost 30x30)
+        renderer.create_ground(size=30.0, color=(0.6, 0.4, 0.2)) # Hnědá barva
+        logger.info("Ground plane created")
     except Exception as e:
         logger.exception("Failed to initialize Renderer or Camera.")
         return # Exit if core components fail
@@ -76,15 +80,16 @@ def main():
             vertices, colors, normals = lsystem.get_vertices()
 
             if vertices.size > 0:
-                renderer.setup_object(vertices, colors, normals) # Pass normals too
+                # Použijeme ID "tree" pro oddělení stromu od země
+                renderer.setup_object(vertices, colors, normals, object_id="tree") # Pass normals too
                 logger.info(f"Generated {vertices.size // 3} vertices for rendering")
             else:
                 logger.error("No vertices generated during regeneration.")
-                renderer.setup_object(np.array([]), np.array([]), np.array([])) # Clear geometry
+                renderer.setup_object(np.array([]), np.array([]), np.array([]), object_id="tree") # Clear geometry
 
         except Exception as e:
             logger.exception(f"Error regenerating tree '{tree_definition.name}': {e}")
-            renderer.setup_object(np.array([]), np.array([]), np.array([])) # Clear on error
+            renderer.setup_object(np.array([]), np.array([]), np.array([]), object_id="tree") # Clear on error
 
 
     # Generate the first tree
