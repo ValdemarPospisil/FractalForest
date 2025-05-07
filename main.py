@@ -1,4 +1,5 @@
 import glfw
+import pyrr
 from pyrr import Matrix44
 import math
 import random
@@ -55,6 +56,7 @@ def main():
     available_trees = [tree_cls().name for tree_cls in TREE_TYPES]
     logger.info(f"Available tree types ({len(available_trees)}): {', '.join(available_trees)}")
     logger.info("Controls: ESC=Exit, SPACE=New Random Tree, 1-%d=Select Specific Tree, F=Generate Forest", len(TREE_TYPES))
+    logger.info("Camera controls: WASD=Move, QE=Up/Down, Right Mouse Button=Look around")
 
 
     # Initial tree generation
@@ -171,14 +173,160 @@ def main():
     forest_density_changing = False
     forest_area_changing = False
     key_f_last_state = glfw.RELEASE
+    
+    # Proměnné pro ovládání kamery myší
+    mouse_look_enabled = False
+    last_mouse_x, last_mouse_y = 0.0, 0.0
+    mouse_sensitivity = 0.003  # Citlivost myši pro otáčení kamery
+    
+    # Callbacky pro myš
+    def mouse_button_callback(window, button, action, mods):
+        nonlocal mouse_look_enabled, last_mouse_x, last_mouse_y # Přidej last_mouse_x, last_mouse_y, pokud je nastavuješ zde
+        
+        if button == glfw.MOUSE_BUTTON_RIGHT and action == glfw.PRESS: # Reaguj pouze na stisk
+            mouse_look_enabled = not mouse_look_enabled # Přepni stav
+
+            if mouse_look_enabled:
+                # Zapnutí režimu ovládání kamery myší
+                glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_DISABLED)
+                # Získat aktuální pozici myši jako výchozí bod
+                # Je důležité to udělat ZDE, aby nedocházelo ke skokům kamery při aktivaci
+                x, y = glfw.get_cursor_pos(window)
+                last_mouse_x, last_mouse_y = x, y
+                logger.debug("Mouse look enabled")
+            else:
+                # Vypnutí režimu ovládání kamery myší
+                glfw.set_input_mode(window, glfw.CURSOR, glfw.CURSOR_NORMAL)
+                logger.debug("Mouse look disabled")
+    
+    def cursor_position_callback(window, x_pos, y_pos):
+        nonlocal last_mouse_x, last_mouse_y, camera
+        
+        if mouse_look_enabled:
+            # Výpočet změny pozice myši
+            x_offset = x_pos - last_mouse_x
+            y_offset = last_mouse_y - y_pos  # Převráceno (y-osa jde odshora dolů)
+            
+            last_mouse_x = x_pos
+            last_mouse_y = y_pos
+            
+            # Aplikace změny na směr kamery
+            x_offset *= mouse_sensitivity
+            y_offset *= mouse_sensitivity
+            
+            # 1. Yaw rotace (kolem osy Y)
+            yaw_matrix = pyrr.Matrix44.from_y_rotation(x_offset) # Rotace kolem globální Y
+            
+            current_direction = np.array(camera.direction, dtype=np.float32)
+            if current_direction.shape != (3,): # Kontrola
+                logger.error(f"Initial camera.direction has unexpected shape: {current_direction.shape}")
+                return
+            
+            # Převod na 4D vektor, zajisti float32 pro konzistenci
+            direction_4d = np.append(current_direction, 0.0).astype(np.float32)
+
+            # --- ZMĚNA ZDE ---
+            # Použij pyrr.matrix44.apply_to_vector pro transformaci vektoru
+            # nebo operátor @
+            # Varianta A: apply_to_vector
+            transformed_vec4 = pyrr.matrix44.apply_to_vector(yaw_matrix, direction_4d)
+            # Varianta B: operátor @ (vyzkoušej, pokud A nefunguje, nebo preferuješ kratší zápis)
+            # transformed_vec4 = yaw_matrix @ direction_4d
+            
+            # Logování pro ověření výsledku transformace
+            logger.debug(f"direction_4d (input to transform): {direction_4d}, shape: {np.shape(direction_4d)}, dtype: {direction_4d.dtype}")
+            logger.debug(f"transformed_vec4 (after transform): {transformed_vec4}, type: {type(transformed_vec4)}, shape: {np.shape(transformed_vec4)}")
+
+            # Získání prvních tří komponent a explicitní konverze na numpy array
+            # Pokud transformed_vec4 je již np.array, np.array() vytvoří kopii.
+            rotated_yaw_direction_3d = np.array(transformed_vec4[:3], dtype=np.float32)
+
+            logger.debug(f"rotated_yaw_direction_3d (before norm): {rotated_yaw_direction_3d}, type: {type(rotated_yaw_direction_3d)}, shape: {np.shape(rotated_yaw_direction_3d)}")
+
+            norm_yaw = np.linalg.norm(rotated_yaw_direction_3d)
+            if norm_yaw > 0.0001:
+                rotated_yaw_direction_3d /= norm_yaw
+            else:
+                logger.warning("Yaw rotation resulted in a near-zero vector.")
+                return
+
+            # 2. Pitch rotace (kolem pravé osy kamery)
+            world_up = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+            
+            # Logování těsně před np.cross
+            logger.debug(f"rotated_yaw_direction_3d (final for cross): {rotated_yaw_direction_3d}, shape: {np.shape(rotated_yaw_direction_3d)}, dtype: {rotated_yaw_direction_3d.dtype}")
+            logger.debug(f"world_up (final for cross): {world_up}, shape: {np.shape(world_up)}, dtype: {world_up.dtype}")
+
+            right_vector = np.cross(rotated_yaw_direction_3d, world_up)
+            norm_right = np.linalg.norm(right_vector)
+            if norm_right > 0.0001:
+                right_vector /= norm_right
+            else:
+                if np.allclose(rotated_yaw_direction_3d, world_up):
+                    right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+                elif np.allclose(rotated_yaw_direction_3d, -world_up):
+                    right_vector = np.array([-1.0, 0.0, 0.0], dtype=np.float32)
+                else: 
+                    logger.warning("Could not determine a valid right_vector for pitch (rotated_yaw_direction_3d may be zero or colinear with world_up in an unexpected way). Using fallback.")
+                    # Fallback na křížový součin s jinou osou, pokud je rotated_yaw_direction_3d např. [0,0,1]
+                    if abs(rotated_yaw_direction_3d[1]) < 0.99: # Není skoro vertikální
+                        right_vector = np.cross(rotated_yaw_direction_3d, np.array([0.0, 1.0, 0.0], dtype=np.float32)) # Zkus znovu s world_up
+                        if np.linalg.norm(right_vector) < 0.0001: # Pokud stále problém
+                             right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32) # Absolutní fallback
+                    else: # Je skoro vertikální
+                        right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+
+                    # Normalizuj fallback right_vector, pokud byl vypočítán přes cross
+                    if np.linalg.norm(right_vector) > 0.0001:
+                        right_vector /= np.linalg.norm(right_vector)
+                    else: # Pokud i fallback je nulový (nemělo by nastat s [1,0,0])
+                         right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32) # Jistota
+
+
+            # Vytvoříme rotační matici kolem pravé osy
+            # OPRAVA ZDE: Použij 'right_vector'
+            pitch_matrix = pyrr.Matrix44(pyrr.matrix44.create_from_axis_rotation(right_vector, y_offset))
+            
+            # Aplikujeme pitch rotaci na rotated_yaw_direction_3d
+            # Nejprve převedeme rotated_yaw_direction_3d na 4D pro transformaci
+            direction_to_pitch_4d = np.append(rotated_yaw_direction_3d, 0.0).astype(np.float32)
+            
+            # Varianta A: apply_to_vector
+            final_rotated_vec4 = pyrr.matrix44.apply_to_vector(pitch_matrix, direction_to_pitch_4d)
+            # Varianta B: operátor @
+            # final_rotated_vec4 = pitch_matrix @ direction_to_pitch_4d
+            
+            final_direction_3d = np.array(final_rotated_vec4[:3], dtype=np.float32)
+            
+            # Normalizace finálního směrového vektoru
+            norm_final = np.linalg.norm(final_direction_3d)
+            if norm_final > 0.0001:
+                final_direction_3d /= norm_final
+            else:
+                logger.warning("Pitch rotation resulted in a near-zero final direction.")
+                return 
+            
+            # Omezení úhlu pitch
+            if final_direction_3d[1] > 0.995: final_direction_3d[1] = 0.995
+            if final_direction_3d[1] < -0.995: final_direction_3d[1] = -0.995
+            final_direction_3d /= np.linalg.norm(final_direction_3d) # Znovu normalizovat po omezení
+
+            # Aktualizace cílového bodu kamery
+            camera.target = np.array(camera.position, dtype=np.float32) + final_direction_3d
+            camera.update_view_matrix()
+
+
+    # Nastavení callbacků
+    glfw.set_mouse_button_callback(renderer.window, mouse_button_callback)
+    glfw.set_cursor_pos_callback(renderer.window, cursor_position_callback)
 
     while not renderer.should_close():
         current_time = glfw.get_time()
         delta_time = current_time - last_time
         last_time = current_time
 
-        # Slow rotation - pouze pro jeden strom
-        if not forest_mode:
+        # Slow rotation - pouze pro jeden strom, a jen když není aktivní ovládání kamery myší
+        if not forest_mode and not mouse_look_enabled:
             angle_y += 0.15 * delta_time # Slower rotation
 
         model_matrix = Matrix44.from_y_rotation(angle_y) * Matrix44.from_x_rotation(angle_x)
@@ -226,11 +374,11 @@ def main():
         key_f_last_state = key_f_current_state
         
         # Ovládání hustoty lesa
-        if glfw.get_key(renderer.window, glfw.KEY_LEFT_BRACKET) == glfw.PRESS:  # [ pro snížení hustoty
+        if glfw.get_key(renderer.window, glfw.KEY_N) == glfw.PRESS:  # [ pro snížení hustoty
             forest_density = max(0.1, forest_density - 0.05)
             forest_density_changing = True
             logger.debug(f"Forest density decreased to {forest_density:.2f}")
-        elif glfw.get_key(renderer.window, glfw.KEY_RIGHT_BRACKET) == glfw.PRESS:  # ] pro zvýšení hustoty
+        elif glfw.get_key(renderer.window, glfw.KEY_M) == glfw.PRESS:  # ] pro zvýšení hustoty
             forest_density = min(1.0, forest_density + 0.05)
             forest_density_changing = True
             logger.debug(f"Forest density increased to {forest_density:.2f}")
@@ -241,11 +389,11 @@ def main():
                 generate_forest()  # Regenerovat les s novou hustotou
         
         # Ovládání velikosti oblasti lesa
-        if glfw.get_key(renderer.window, glfw.KEY_MINUS) == glfw.PRESS:  # - pro zmenšení oblasti
+        if glfw.get_key(renderer.window, glfw.KEY_K) == glfw.PRESS:  # - pro zmenšení oblasti
             forest_area_size = max(10.0, forest_area_size - 1.0)
             forest_area_changing = True
             logger.debug(f"Forest area decreased to {forest_area_size:.1f}")
-        elif glfw.get_key(renderer.window, glfw.KEY_EQUAL) == glfw.PRESS:  # = pro zvětšení oblasti
+        elif glfw.get_key(renderer.window, glfw.KEY_L) == glfw.PRESS:  # = pro zvětšení oblasti
             forest_area_size = min(40.0, forest_area_size + 1.0)
             forest_area_changing = True
             logger.debug(f"Forest area increased to {forest_area_size:.1f}")

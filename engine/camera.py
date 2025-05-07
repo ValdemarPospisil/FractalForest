@@ -31,20 +31,48 @@ class Camera:
 
     def update_view_matrix(self):
         """Aktualizuje pohledovou matici."""
-        self.view_matrix = Matrix44.look_at(self.position, self.target, self.up)
+        self.view_matrix = Matrix44.look_at(self.position, self.target, np.array(self.up, dtype=np.float32))
         # Aktualizujeme směrový vektor
-        self.direction = self.target - self.position
-        self.direction = self.direction / np.linalg.norm(self.direction)
+        _direction = np.array(self.target, dtype=np.float32) - np.array(self.position, dtype=np.float32)
+        norm_direction = np.linalg.norm(_direction)
+        if norm_direction > 0.0001:
+            self.direction = _direction / norm_direction # self.direction je nyní np.ndarray
+        else:
+            self.direction = np.array([0.0, 0.0, -1.0], dtype=np.float32) # Fallback
+
+        _up = np.array(self.up, dtype=np.float32) # Začni s původním 'up' jako np.array
+
         
-        # Aktualizujeme ostatní směrové vektory
-        # Right vektor je kolmý na direction a up
-        self.right = np.cross(self.direction, self.up)
-        if np.linalg.norm(self.right) > 0:
-            self.right = self.right / np.linalg.norm(self.right)
-        
+         # Aktualizujeme ostatní směrové vektory
+        _right = np.cross(self.direction, _up)
+        norm_right = np.linalg.norm(_right)
+        if norm_right > 0.0001:
+            self.right = _right / norm_right # self.right je np.ndarray
+        else:
+            # Pokud je direction a up kolineární, zvolíme nějaký arbitrární right
+            # Např. pokud direction je [0,1,0], cross s [0,1,0] je [0,0,0]
+            # Musíme se vyhnout této situaci, camera.up by neměl být kolineární s camera.direction
+            # V takovém případě je lepší camera.up zvolit jinak, např. [1,0,0] pokud direction je [0,1,0]
+            # Pro obecný případ:
+            if np.allclose(self.direction, np.array([0.0, 1.0, 0.0])) or np.allclose(self.direction, np.array([0.0, -1.0, 0.0])):
+                self.right = np.array([1.0, 0.0, 0.0], dtype=np.float32)
+            else:
+                self.right = np.cross(self.direction, np.array([0.0, 1.0, 0.0], dtype=np.float32)) # Křížový součin s globální osou Y
+                norm_r = np.linalg.norm(self.right)
+                if norm_r > 0.0001: self.right /= norm_r
+                else: self.right = np.array([1.0, 0.0, 0.0], dtype=np.float32) # Absolutní fallback
+
+
         # Skutečný up vektor (kolmý na right a direction)
-        self.up = np.cross(self.right, self.direction)
-        self.up = self.up / np.linalg.norm(self.up)
+        # Ujisti se, že self.right a self.direction jsou normalizované před tímto cross productem
+        _true_up = np.cross(self.right, self.direction) 
+        norm_true_up = np.linalg.norm(_true_up)
+        if norm_true_up > 0.0001:
+            self.up = _true_up / norm_true_up # self.up je np.ndarray
+        else:
+            # Toto by se nemělo stát, pokud right a direction jsou ortogonální a nenulové
+            self.up = np.array([0.0, 1.0, 0.0], dtype=np.float32) # Fallback
+
         
         # Odvození ostatních směrových vektorů
         self.left = -self.right
