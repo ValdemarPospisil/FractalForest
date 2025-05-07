@@ -6,12 +6,14 @@ import random
 import logging
 import os
 import numpy as np
+import time  # Přidáno pro výpočet FPS
 
 # Importy z našich modulů
 from engine.renderer import Renderer 
 from engine.camera import Camera    
 from generation.tree import get_random_tree_type, get_tree_by_name, TREE_TYPES
 from generation.forest import ForestGenerator  # Nový import pro generování lesa
+from ui import UIManager  # Import UI manažera
 
 
 
@@ -48,6 +50,10 @@ def main():
         # Vytvoříme širokou zem (velikost 30x30)
         renderer.create_ground(size=30.0, color=(0.6, 0.4, 0.2)) # Hnědá barva
         logger.info("Ground plane created")
+        
+        # Inicializace UI manažera
+        ui_manager = UIManager(renderer.ctx, (renderer.width, renderer.height))
+        logger.info("UI Manager initialized")
     except Exception as e:
         logger.exception("Failed to initialize Renderer or Camera.")
         return # Exit if core components fail
@@ -75,6 +81,10 @@ def main():
 
         # Přepnutí do režimu jednoho stromu
         forest_mode = False
+        
+        # Aktualizace UI manažera
+        ui_manager.set_forest_mode(False)
+        ui_manager.set_current_tree(tree_definition.name)
         
         # Vymazání všech stromů lesa
         if forest_generator and hasattr(forest_generator, 'trees'):
@@ -114,6 +124,9 @@ def main():
         # Přepnutí do režimu lesa
         forest_mode = True
         
+        # Aktualizace UI manažera
+        ui_manager.set_forest_mode(True)
+        
         # Vymazání strom v režimu jednoho stromu
         renderer.setup_object(np.array([]), np.array([]), np.array([]), object_id="tree")
         current_tree_def = None
@@ -152,6 +165,9 @@ def main():
                     else:
                         type_counts[t] = 1
                 
+                # Aktualizace informací v UI manažeru
+                ui_manager.set_forest_info(len(forest_generator.trees), type_counts)
+                
                 logger.info(f"Generated forest with {len(forest_generator.trees)} trees:")
                 for tree_type, count in type_counts.items():
                     logger.info(f"  - {tree_type}: {count} trees")
@@ -178,6 +194,11 @@ def main():
     mouse_look_enabled = False
     last_mouse_x, last_mouse_y = 0.0, 0.0
     mouse_sensitivity = 0.003  # Citlivost myši pro otáčení kamery
+    
+    # Proměnné pro výpočet FPS
+    frame_count = 0
+    fps_update_time = last_time
+    current_fps = 0.0
     
     # Callbacky pro myš
     def mouse_button_callback(window, button, action, mods):
@@ -320,10 +341,20 @@ def main():
     glfw.set_mouse_button_callback(renderer.window, mouse_button_callback)
     glfw.set_cursor_pos_callback(renderer.window, cursor_position_callback)
 
+    # Callback pro přepínání viditelnosti UI
+    key_h_last_state = glfw.RELEASE
+    
     while not renderer.should_close():
         current_time = glfw.get_time()
         delta_time = current_time - last_time
         last_time = current_time
+        
+        # Výpočet FPS
+        frame_count += 1
+        if current_time - fps_update_time >= 0.5:  # Aktualizace každou půl sekundu
+            current_fps = frame_count / (current_time - fps_update_time)
+            fps_update_time = current_time
+            frame_count = 0
 
         # Slow rotation - pouze pro jeden strom, a jen když není aktivní ovládání kamery myší
         if not forest_mode and not mouse_look_enabled:
@@ -332,7 +363,12 @@ def main():
         model_matrix = Matrix44.from_y_rotation(angle_y) * Matrix44.from_x_rotation(angle_x)
 
         try:
+            # Vykreslení scény
             renderer.render(camera, model_matrix)
+            
+            # Vykreslení UI
+            ui_manager.render(fps=current_fps)
+            
             renderer.swap_buffers()
         except Exception as e:
              logger.exception("Error during rendering loop.")
@@ -345,6 +381,21 @@ def main():
         if glfw.get_key(renderer.window, glfw.KEY_ESCAPE) == glfw.PRESS:
             logger.info("ESC pressed, exiting.")
             glfw.set_window_should_close(renderer.window, True)
+
+        # Toggles pro UI
+        key_h_current_state = glfw.get_key(renderer.window, glfw.KEY_H)
+        if key_h_current_state == glfw.PRESS and key_h_last_state == glfw.RELEASE:
+            ui_manager.toggle_controls_visibility()
+            logger.debug("Toggled controls visibility")
+        key_h_last_state = key_h_current_state
+        
+        # Toggle FPS viditelnosti
+        key_p_last_state = glfw.RELEASE
+        key_p_current_state = glfw.get_key(renderer.window, glfw.KEY_P)
+        if key_p_current_state == glfw.PRESS and key_p_last_state == glfw.RELEASE:
+            ui_manager.toggle_fps_visibility()
+            logger.debug("Toggled FPS visibility")
+        key_p_last_state = key_p_current_state
 
         # Regenerate random tree
         if glfw.get_key(renderer.window, glfw.KEY_G) == glfw.PRESS:
