@@ -347,7 +347,7 @@ def main():
             glfw.set_window_should_close(renderer.window, True)
 
         # Regenerate random tree
-        if glfw.get_key(renderer.window, glfw.KEY_SPACE) == glfw.PRESS:
+        if glfw.get_key(renderer.window, glfw.KEY_G) == glfw.PRESS:
              # Simple debounce: check if tree def changed recently? Or just allow rapid fire.
              # For now, allow rapid fire.
              regenerate_tree(get_random_tree_type(), renderer)
@@ -424,10 +424,10 @@ def main():
             camera_moved = True
             
         # Pohyb nahoru/dolů - posun kamery a cíl stejným směrem
-        if glfw.get_key(renderer.window, glfw.KEY_Q) == glfw.PRESS:
+        if glfw.get_key(renderer.window, glfw.KEY_LEFT_SHIFT) == glfw.PRESS or glfw.get_key(renderer.window, glfw.KEY_Q) == glfw.PRESS :
             camera.move(camera.down, move_speed)
             camera_moved = True
-        if glfw.get_key(renderer.window, glfw.KEY_E) == glfw.PRESS:
+        if glfw.get_key(renderer.window, glfw.KEY_SPACE) == glfw.PRESS or glfw.get_key(renderer.window, glfw.KEY_E) == glfw.PRESS:
             camera.move(camera.up, move_speed)
             camera_moved = True
             
