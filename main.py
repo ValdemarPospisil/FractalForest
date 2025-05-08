@@ -2,11 +2,10 @@ import glfw
 import pyrr
 from pyrr import Matrix44
 import math
-import random
+import dearpygui.dearpygui as dpg
 import logging
 import os
 import numpy as np
-import time  # Přidáno pro výpočet FPS
 
 # Importy z našich modulů
 from engine.renderer import Renderer 
@@ -38,6 +37,8 @@ def main():
 
     logger.info("Initializing application...")
     try:
+        dpg.create_context()
+        dpg.create_viewport(title='Procedural L-System Forest', width=1366, height=768)
         renderer = Renderer(width=1366, height=768, title="Procedural L-System Forest") # Larger window
         camera = Camera(renderer.width, renderer.height)
 
@@ -71,6 +72,8 @@ def main():
     forest_mode = False  # Nový příznak pro režim lesa
     forest_density = 0.5  # Výchozí hustota lesa
     forest_area_size = 20.0  # Výchozí velikost oblasti lesa
+    tree_count = 45
+
     
     def regenerate_tree(tree_definition, renderer):
         """Pomocná funkce pro regeneraci stromu."""
@@ -142,14 +145,14 @@ def main():
                     renderer,
                     area_size=forest_area_size,
                     density=forest_density,
-                    min_trees=15,
-                    max_trees=35,
+                    tree_count=tree_count,
                     min_distance=1.0
                 )
             else:
                 # Aktualizace parametrů
                 forest_generator.area_size = forest_area_size
                 forest_generator.density = forest_density
+                forest_generator.tree_count = tree_count
             
             # Generování a vykreslení lesa
             forest_generator.generate_forest()
@@ -188,6 +191,7 @@ def main():
     # Pro ovládání hustoty lesa a velikosti oblasti
     forest_density_changing = False
     forest_area_changing = False
+    tree_count_changing = False
     key_f_last_state = glfw.RELEASE
     
     # Proměnné pro ovládání kamery myší
@@ -425,34 +429,49 @@ def main():
         key_f_last_state = key_f_current_state
         
         # Ovládání hustoty lesa
-        if glfw.get_key(renderer.window, glfw.KEY_N) == glfw.PRESS:  # [ pro snížení hustoty
+        if glfw.get_key(renderer.window, glfw.KEY_N) == glfw.PRESS:
             forest_density = max(0.1, forest_density - 0.05)
             forest_density_changing = True
             logger.debug(f"Forest density decreased to {forest_density:.2f}")
-        elif glfw.get_key(renderer.window, glfw.KEY_M) == glfw.PRESS:  # ] pro zvýšení hustoty
-            forest_density = min(1.0, forest_density + 0.05)
+        elif glfw.get_key(renderer.window, glfw.KEY_M) == glfw.PRESS:
+            forest_density = min(3.0, forest_density + 0.05)
             forest_density_changing = True
             logger.debug(f"Forest density increased to {forest_density:.2f}")
         elif forest_density_changing:
             forest_density_changing = False
             logger.info(f"Forest density set to {forest_density:.2f}")
             if forest_mode:
-                generate_forest()  # Regenerovat les s novou hustotou
+                generate_forest()
         
         # Ovládání velikosti oblasti lesa
-        if glfw.get_key(renderer.window, glfw.KEY_K) == glfw.PRESS:  # - pro zmenšení oblasti
-            forest_area_size = max(10.0, forest_area_size - 1.0)
+        if glfw.get_key(renderer.window, glfw.KEY_K) == glfw.PRESS:
+            forest_area_size = max(5.0, forest_area_size - 1.0)
             forest_area_changing = True
             logger.debug(f"Forest area decreased to {forest_area_size:.1f}")
-        elif glfw.get_key(renderer.window, glfw.KEY_L) == glfw.PRESS:  # = pro zvětšení oblasti
-            forest_area_size = min(40.0, forest_area_size + 1.0)
+        elif glfw.get_key(renderer.window, glfw.KEY_L) == glfw.PRESS:
+            forest_area_size = min(80.0, forest_area_size + 1.0)
             forest_area_changing = True
-            logger.debug(f"Forest area increased to {forest_area_size:.1f}")
+            logger.debug(f"Forest area increased to {forest_area_size}")
         elif forest_area_changing:
             forest_area_changing = False
             logger.info(f"Forest area size set to {forest_area_size:.1f}")
             if forest_mode:
-                generate_forest()  # Regenerovat les s novou velikostí oblasti
+                generate_forest()
+
+        # Ovládání počtu stromů v lese      
+        if glfw.get_key(renderer.window, glfw.KEY_O) == glfw.PRESS:
+            tree_count = max(15, tree_count - 1)
+            tree_count_changing = True
+            logger.debug(f"Forest tree count decreased to {tree_count}")
+        elif glfw.get_key(renderer.window, glfw.KEY_P) == glfw.PRESS:
+            tree_count = min(100, tree_count + 1)
+            tree_count_changing = True
+            logger.debug(f"Forest tree count increased to {tree_count}")
+        elif tree_count_changing:
+            tree_count_changing = False
+            logger.info(f"Forest tree count set to {tree_count}")
+            if forest_mode:
+                generate_forest()
         
         # Ovládání kamery s novým systémem pohybu
         move_speed = 1 * delta_time
@@ -489,7 +508,11 @@ def main():
 
     logger.info("Cleaning up resources...")
     renderer.cleanup()
+    if 'ui_manager' in locals():
+        ui_manager.cleanup()
     glfw.terminate()
+    if dpg.is_dearpygui_running():
+        dpg.destroy_context()
     logger.info("Application exited cleanly.")
 
 if __name__ == "__main__":

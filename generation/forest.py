@@ -11,9 +11,8 @@ class ForestGenerator:
                  renderer, 
                  area_size: float = 20.0, 
                  density: float = 0.5,
-                 min_trees: int = 15,
-                 max_trees: int = 25,
-                 min_distance: float = 1.0):
+                 tree_count: int = 20,
+                 min_distance: float = 0.2):
         """
         Inicializuje generátor lesa.
         
@@ -27,19 +26,12 @@ class ForestGenerator:
         """
         self.renderer = renderer
         self.area_size = area_size
-        self.density = max(0.1, min(1.0, density))  # Omezení na 0.1-1.0
-        self.min_trees = min_trees
-        self.max_trees = max_trees
+        self.density = max(0.1, min(3.0, density))  # Omezení na 0.1-1.0
+        self.tree_count = tree_count
         self.min_distance = min_distance
         self.trees = []  # Seznam vygenerovaných stromů s pozicemi
         self.logger = logging.getLogger(__name__)
         
-    def _calculate_tree_count(self) -> int:
-        """Vypočítá počet stromů podle hustoty."""
-        # Lineární interpolace mezi min a max podle hustoty
-        count = int(self.min_trees + (self.max_trees - self.min_trees) * self.density)
-        return count
-    
     def _is_valid_position(self, pos: Tuple[float, float], positions: List[Tuple[float, float]]) -> bool:
         """Zkontroluje, zda je pozice dostatečně daleko od ostatních stromů."""
         for existing_pos in positions:
@@ -98,11 +90,10 @@ class ForestGenerator:
             Seznam dvojic (definice_stromu, pozice_xz)
         """
         # Určení počtu stromů
-        tree_count = self._calculate_tree_count()
-        self.logger.info(f"Generating forest with {tree_count} trees (density: {self.density:.2f})")
+        self.logger.info(f"Generating forest with {self.tree_count} trees (density: {self.density:.2f})")
         
         # Generování pozic pro stromy
-        positions = self._generate_tree_positions(tree_count)
+        positions = self._generate_tree_positions(self.tree_count)
         
         # Vybrání typů stromů
         tree_types = self._select_tree_types(len(positions))
@@ -143,7 +134,6 @@ class ForestGenerator:
                     for j in range(0, len(transformed_vertices), 3):
                         transformed_vertices[j] += x   # Posun X
                         transformed_vertices[j+2] += z  # Posun Z
-                    
                     # Vykreslení stromu s unikátním ID
                     self.renderer.setup_object(transformed_vertices, colors, normals,
                                              object_id=f"tree_{i}")

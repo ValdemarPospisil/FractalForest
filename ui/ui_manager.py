@@ -1,7 +1,8 @@
 """
-UI Manager pro koordinaci zobrazování informací na obrazovce.
+UI Manager pro koordinaci zobrazování informací na obrazovce pomocí DearPyGUI.
 """
 import logging
+import dearpygui.dearpygui as dpg
 from .text_renderer import TextRenderer
 
 class UIManager:
@@ -37,10 +38,12 @@ class UIManager:
             "K/L": "Velikost lesa -/+",
             "WASD+QE": "Pohyb kamery",
             "RMB": "Rozhlížení",
+            "H": "Zobrazit/skrýt ovládání",
+            "P": "Zobrazit/skrýt FPS",
             "ESC": "Konec"
         }
         
-        self.logger.info("UI Manager initialized")
+        self.logger.info("UI Manager initialized with DearPyGUI")
     
     def set_forest_mode(self, enabled):
         """
@@ -94,6 +97,9 @@ class UIManager:
             fps: Aktuální snímková frekvence (volitelné)
         """
         try:
+            # Nejprve vyčistíme text, abychom zamezili překrývání
+            self.text_renderer.clear_text()
+            
             # Zobrazení ovládání
             if self.show_controls:
                 self.text_renderer.render_controls_info(position=(10, 10), controls=self.controls)
@@ -114,6 +120,18 @@ class UIManager:
             # Zobrazení FPS
             if self.show_fps and fps is not None:
                 self.text_renderer.render_fps(fps, position=(self.window_size[0] - 120, 10))
+            
+            # Aktualizace DearPyGUI
+            self.text_renderer.update()
                 
         except Exception as e:
             self.logger.exception(f"Error rendering UI: {e}")
+    
+    def cleanup(self):
+        """Uvolnění prostředků DearPyGUI."""
+        try:
+            if dpg.is_dearpygui_running():
+                dpg.destroy_context()
+            self.logger.info("DearPyGUI context destroyed")
+        except Exception as e:
+            self.logger.exception(f"Error during DearPyGUI cleanup: {e}")

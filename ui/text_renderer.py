@@ -1,39 +1,35 @@
 """
-Text rendering module for displaying text information on screen using moderngl_window.Text.
+Text rendering module for displaying text information on screen using DearPyGUI.
 """
-import moderngl_window as mglw
-from moderngl_window import text
+import dearpygui.dearpygui as dpg
 import logging
 
 class TextRenderer:
-    """Class for rendering text information on screen using moderngl_window.Text."""
-    
-    def __init__(self, ctx, window_size=(1366, 768), font_size=18):
-        """
-        Initializes the text renderer.
-        
-        Args:
-            ctx: moderngl context
-            window_size: Window size (width, height)
-            font_size: Font size
-        """
+    def __init__(self, ctx=None, window_size=(1366, 768), font_size=18):
         self.logger = logging.getLogger(__name__)
-        self.ctx = ctx
         self.window_size = window_size
         self.font_size = font_size
-        self.text_instances = {}
+        self.text_items = {}
+        self.is_initialized = False
         
         try:
-            # Load a font (this creates a texture atlas)
-            self.font = mglw.resources.fonts.load(
-                "NotoSans-Regular.ttf",
-                size=self.font_size,
-                charset="iso-8859-2"
-            )
-            self.logger.info("Text renderer initialized successfully")
+            # Don't create new context - assume it's created by main application
+            if not dpg.is_dearpygui_running():
+                self.logger.error("DearPyGUI context not created!")
+                return
+                
+            # Create overlay window
+            with dpg.window(label="Text Overlay", tag="text_overlay", 
+                           no_title_bar=True, no_resize=True, no_move=True,
+                           no_collapse=True, no_close=True,
+                           width=window_size[0], height=window_size[1]):
+                pass
+            
+            dpg.set_viewport_clear_color([0, 0, 0, 0])  # Transparent background
+            self.is_initialized = True
+            self.logger.info("Text renderer initialized")
         except Exception as e:
             self.logger.exception(f"Failed to initialize text renderer: {e}")
-            self.font = None
     
     def render_text(self, text, position, color=(1.0, 1.0, 1.0, 1.0)):
         """
@@ -44,32 +40,35 @@ class TextRenderer:
             position: Position (x, y) - top-left corner
             color: Text color (r, g, b, a)
         """
-        if self.font is None:
+        if not self.is_initialized:
             return
         
         try:
             x, y = position
+            text_id = f"text_{x}_{y}_{hash(text)}"  # Using hash to create unique ID
             
-            # Create a new Text instance if we don't have one for this text
-            if text not in self.text_instances:
-                self.text_instances[text] = Text(
-                    text=text,
-                    font=self.font,
-                    color=color,
+            # Convert color from 0-1 to 0-255 range
+            dpg_color = [int(c * 255) for c in color]
+            
+            # Create or update text item
+            if text_id not in self.text_items:
+                self.text_items[text_id] = dpg.add_text(
+                    text,
+                    parent="text_overlay",
                     pos=(x, y),
+                    color=dpg_color
                 )
-            
-            # Update position and color if needed
-            text_instance = self.text_instances[text]
-            text_instance.pos = (x, y)
-            text_instance.color = color
-            
-            # Render the text
-            text_instance.draw()
-            
+            else:
+                dpg.set_value(self.text_items[text_id], text)
+                dpg.set_item_pos(self.text_items[text_id], (x, y))
+                dpg.configure_item(self.text_items[text_id], color=dpg_color)
+                
         except Exception as e:
-            self.logger.exception(f"Error rendering text: {e}")
+            self.logger.exception(f"Error rendering text with DearPyGUI: {e}")
     
+    # ... rest of your methods remain the same ...
+
+
     def render_controls_info(self, position=(10, 10), controls=None):
         """
         Renders control information.
@@ -136,3 +135,29 @@ class TextRenderer:
             position: Position (x, y)
         """
         self.render_text(f"FPS: {fps:.1f}", position, color=(0.9, 0.9, 0.9, 1.0))
+    
+    def clear_text(self):
+        """
+        Clears all text from the screen.
+        """
+        if not self.is_initialized:
+            return
+            
+        try:
+            for text_id in self.text_items.values():
+                dpg.delete_item(text_id)
+            self.text_items = {}
+        except Exception as e:
+            self.logger.exception(f"Error clearing text: {e}")
+    
+    def update(self):
+        """
+        Updates the DearPyGUI renderer. This should be called each frame.
+        """
+        if not self.is_initialized:
+            return
+            
+        try:
+            dpg.render_dearpygui_frame()
+        except Exception as e:
+            self.logger.exception(f"Error updating DearPyGUI: {e}")

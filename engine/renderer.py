@@ -80,7 +80,7 @@ class Renderer:
             if 'vao' in obj: obj['vao'].release()
 
         if len(vertices) == 0 or len(colors) == 0:
-            logging.warning(f"No vertices or colors to set up for object {object_id}.")
+            #logging.warning(f"No vertices or colors to set up for object {object_id}.")
             if object_id in self.objects:
                 del self.objects[object_id]
             return
