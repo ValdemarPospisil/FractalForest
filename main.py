@@ -42,7 +42,25 @@ def main():
         renderer = Renderer(width=1366, height=768, title="Procedural L-System Forest")
         camera = Camera(renderer.width, renderer.height)
 
-        camera.position = np.array([0.0, 1.0, 4.0])
+        mouse_look_enabled = False
+        last_mouse_x, last_mouse_y = 0.0, 0.0
+        mouse_sensitivity = 0.003  # Citlivost myši pro otáčení kamery
+
+        # Inicializace proměnných pro Eulerovy úhly
+        yaw = -np.pi / 2  # Začíná otočená na -90 stupňů (dívá se ve směru osy -Z)
+        pitch = 0.0       # Začíná bez náklonu nahoru/dolů
+
+        # Výpočet počátečního směru kamery
+        initial_direction = np.array([
+            np.cos(yaw) * np.cos(pitch),
+            np.sin(pitch),
+            np.sin(yaw) * np.cos(pitch)
+        ], dtype=np.float32)
+        initial_direction = initial_direction / np.linalg.norm(initial_direction)
+
+        # Nastavení počáteční pozice a cíle kamery
+        camera.position = np.array([0.0, 1.0, 4.0], dtype=np.float32)
+        camera.target = camera.position + initial_direction
         camera.update_view_matrix()
         logger.info("Renderer and Camera initialized.")
         logger.info(f"Camera positioned at {camera.position}, looking at {camera.target}")
@@ -236,105 +254,33 @@ def main():
             x_offset *= mouse_sensitivity
             y_offset *= mouse_sensitivity
             
-            # 1. Yaw rotace (kolem osy Y)
-            yaw_matrix = pyrr.Matrix44.from_y_rotation(x_offset) # Rotace kolem globální Y
+            # Zjednodušený přístup pomocí Euler úhlů
+            # Udržujeme globální úhly rotace
+            nonlocal yaw, pitch
             
-            current_direction = np.array(camera.direction, dtype=np.float32)
-            if current_direction.shape != (3,): # Kontrola
-                logger.error(f"Initial camera.direction has unexpected shape: {current_direction.shape}")
-                return
+            # Aktualizace úhlů
+            yaw += x_offset  # Rotace doleva/doprava
+            pitch += y_offset  # Rotace nahoru/dolů
             
-            # Převod na 4D vektor, zajisti float32 pro konzistenci
-            direction_4d = np.append(current_direction, 0.0).astype(np.float32)
-
-            # --- ZMĚNA ZDE ---
-            # Použij pyrr.matrix44.apply_to_vector pro transformaci vektoru
-            # nebo operátor @
-            # Varianta A: apply_to_vector
-            transformed_vec4 = pyrr.matrix44.apply_to_vector(yaw_matrix, direction_4d)
-            # Varianta B: operátor @ (vyzkoušej, pokud A nefunguje, nebo preferuješ kratší zápis)
-            # transformed_vec4 = yaw_matrix @ direction_4d
+            # Omezení úhlu pitch (zabránění převrácení kamery)
+            if pitch > 1.5:  # ~85 stupňů
+                pitch = 1.5
+            if pitch < -1.5:  # ~-85 stupňů
+                pitch = -1.5
             
-            # Logování pro ověření výsledku transformace
-            logger.debug(f"direction_4d (input to transform): {direction_4d}, shape: {np.shape(direction_4d)}, dtype: {direction_4d.dtype}")
-            logger.debug(f"transformed_vec4 (after transform): {transformed_vec4}, type: {type(transformed_vec4)}, shape: {np.shape(transformed_vec4)}")
-
-            # Získání prvních tří komponent a explicitní konverze na numpy array
-            # Pokud transformed_vec4 je již np.array, np.array() vytvoří kopii.
-            rotated_yaw_direction_3d = np.array(transformed_vec4[:3], dtype=np.float32)
-
-            logger.debug(f"rotated_yaw_direction_3d (before norm): {rotated_yaw_direction_3d}, type: {type(rotated_yaw_direction_3d)}, shape: {np.shape(rotated_yaw_direction_3d)}")
-
-            norm_yaw = np.linalg.norm(rotated_yaw_direction_3d)
-            if norm_yaw > 0.0001:
-                rotated_yaw_direction_3d /= norm_yaw
-            else:
-                logger.warning("Yaw rotation resulted in a near-zero vector.")
-                return
-
-            # 2. Pitch rotace (kolem pravé osy kamery)
-            world_up = np.array([0.0, 1.0, 0.0], dtype=np.float32)
+            # Výpočet nového směrového vektoru
+            # Vzorec převádí sférické souřadnice na kartézské
+            direction = np.array([
+                np.cos(yaw) * np.cos(pitch),
+                np.sin(pitch),
+                np.sin(yaw) * np.cos(pitch)
+            ], dtype=np.float32)
             
-            # Logování těsně před np.cross
-            logger.debug(f"rotated_yaw_direction_3d (final for cross): {rotated_yaw_direction_3d}, shape: {np.shape(rotated_yaw_direction_3d)}, dtype: {rotated_yaw_direction_3d.dtype}")
-            logger.debug(f"world_up (final for cross): {world_up}, shape: {np.shape(world_up)}, dtype: {world_up.dtype}")
-
-            right_vector = np.cross(rotated_yaw_direction_3d, world_up)
-            norm_right = np.linalg.norm(right_vector)
-            if norm_right > 0.0001:
-                right_vector /= norm_right
-            else:
-                if np.allclose(rotated_yaw_direction_3d, world_up):
-                    right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-                elif np.allclose(rotated_yaw_direction_3d, -world_up):
-                    right_vector = np.array([-1.0, 0.0, 0.0], dtype=np.float32)
-                else: 
-                    logger.warning("Could not determine a valid right_vector for pitch (rotated_yaw_direction_3d may be zero or colinear with world_up in an unexpected way). Using fallback.")
-                    # Fallback na křížový součin s jinou osou, pokud je rotated_yaw_direction_3d např. [0,0,1]
-                    if abs(rotated_yaw_direction_3d[1]) < 0.99: # Není skoro vertikální
-                        right_vector = np.cross(rotated_yaw_direction_3d, np.array([0.0, 1.0, 0.0], dtype=np.float32)) # Zkus znovu s world_up
-                        if np.linalg.norm(right_vector) < 0.0001: # Pokud stále problém
-                             right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32) # Absolutní fallback
-                    else: # Je skoro vertikální
-                        right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32)
-
-                    # Normalizuj fallback right_vector, pokud byl vypočítán přes cross
-                    if np.linalg.norm(right_vector) > 0.0001:
-                        right_vector /= np.linalg.norm(right_vector)
-                    else: # Pokud i fallback je nulový (nemělo by nastat s [1,0,0])
-                         right_vector = np.array([1.0, 0.0, 0.0], dtype=np.float32) # Jistota
-
-
-            # Vytvoříme rotační matici kolem pravé osy
-            # OPRAVA ZDE: Použij 'right_vector'
-            pitch_matrix = pyrr.Matrix44(pyrr.matrix44.create_from_axis_rotation(right_vector, y_offset))
+            # Normalizace vektoru
+            direction = direction / np.linalg.norm(direction)
             
-            # Aplikujeme pitch rotaci na rotated_yaw_direction_3d
-            # Nejprve převedeme rotated_yaw_direction_3d na 4D pro transformaci
-            direction_to_pitch_4d = np.append(rotated_yaw_direction_3d, 0.0).astype(np.float32)
-            
-            # Varianta A: apply_to_vector
-            final_rotated_vec4 = pyrr.matrix44.apply_to_vector(pitch_matrix, direction_to_pitch_4d)
-            # Varianta B: operátor @
-            # final_rotated_vec4 = pitch_matrix @ direction_to_pitch_4d
-            
-            final_direction_3d = np.array(final_rotated_vec4[:3], dtype=np.float32)
-            
-            # Normalizace finálního směrového vektoru
-            norm_final = np.linalg.norm(final_direction_3d)
-            if norm_final > 0.0001:
-                final_direction_3d /= norm_final
-            else:
-                logger.warning("Pitch rotation resulted in a near-zero final direction.")
-                return 
-            
-            # Omezení úhlu pitch
-            if final_direction_3d[1] > 0.995: final_direction_3d[1] = 0.995
-            if final_direction_3d[1] < -0.995: final_direction_3d[1] = -0.995
-            final_direction_3d /= np.linalg.norm(final_direction_3d) # Znovu normalizovat po omezení
-
             # Aktualizace cílového bodu kamery
-            camera.target = np.array(camera.position, dtype=np.float32) + final_direction_3d
+            camera.target = np.array(camera.position, dtype=np.float32) + direction
             camera.update_view_matrix()
 
 
