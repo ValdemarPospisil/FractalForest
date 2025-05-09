@@ -2,8 +2,7 @@ import moderngl
 import glfw
 import numpy as np
 import logging
-import os
-from .camera import Camera # Relativní import kamery
+from .camera import Camera
 
 class Renderer:
     """Třída pro správu vykreslování pomocí ModernGL."""
@@ -22,9 +21,9 @@ class Renderer:
         # Nastavení počátečních OpenGL stavů
         self.ctx.enable(moderngl.DEPTH_TEST)
         # Můžeme zapnout i blendování, pokud budeme mít průhlednost
-        # self.ctx.enable(moderngl.BLEND)
-        # self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
-        self.ctx.line_width = 85 # Mírně tlustší čáry pro lepší viditelnost
+        self.ctx.enable(moderngl.BLEND)
+        self.ctx.blend_func = moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA
+        self.ctx.line_width = 150 # Mírně tlustší čáry pro lepší viditelnost
         self.program['light_direction'] = (0.5, 1.0, 0.5)
         
         logging.info("Renderer initialized successfully")
@@ -56,7 +55,7 @@ class Renderer:
         glfw.window_hint(glfw.CONTEXT_VERSION_MINOR, 3)
         glfw.window_hint(glfw.OPENGL_PROFILE, glfw.OPENGL_CORE_PROFILE)
         glfw.window_hint(glfw.OPENGL_FORWARD_COMPAT, True)
-        #glfw.window_hint(glfw.SAMPLES, 4) # Antialiasing (volitelné)
+        glfw.window_hint(glfw.SAMPLES, 4) # Antialiasing (volitelné)
 
         window = glfw.create_window(self.width, self.height, title, None, None)
         if not window:
@@ -65,7 +64,7 @@ class Renderer:
             raise RuntimeError("Nelze vytvořit GLFW okno")
 
         glfw.make_context_current(window)
-        #glfw.swap_interval(1) # VSync (volitelné)
+        glfw.swap_interval(1) # VSync (volitelné)
         logging.info(f"GLFW window created with dimensions {self.width}x{self.height}")
         return window
 

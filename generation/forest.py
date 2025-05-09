@@ -1,16 +1,14 @@
 import random
 import logging
 import numpy as np
-from typing import List, Tuple, Optional
-from .tree import get_random_tree_type, get_tree_by_name, TreeDefinition, TREE_TYPES
-
+from typing import List, Tuple
+from .tree import get_random_tree_type, TreeDefinition
 class ForestGenerator:
     """Třída pro generování lesa s více stromy."""
     
     def __init__(self, 
                  renderer, 
                  area_size: float = 20.0, 
-                 density: float = 0.5,
                  tree_count: int = 20,
                  min_distance: float = 0.2):
         """
@@ -19,16 +17,14 @@ class ForestGenerator:
         Args:
             renderer: Instance rendereru pro vykreslování stromů
             area_size: Velikost čtvercové oblasti pro generování lesa
-            density: Hustota lesa (0.0 - 1.0), ovlivňuje počet stromů
             min_trees: Minimální počet stromů
             max_trees: Maximální počet stromů
             min_distance: Minimální vzdálenost mezi stromy
         """
         self.renderer = renderer
         self.area_size = area_size
-        self.density = max(0.1, min(3.0, density))  # Omezení na 0.1-1.0
         self.tree_count = tree_count
-        self.min_distance = min_distance
+        self.min_distance = max(0.1, min(3.0, min_distance)) 
         self.trees = []  # Seznam vygenerovaných stromů s pozicemi
         self.logger = logging.getLogger(__name__)
         
@@ -90,7 +86,7 @@ class ForestGenerator:
             Seznam dvojic (definice_stromu, pozice_xz)
         """
         # Určení počtu stromů
-        self.logger.info(f"Generating forest with {self.tree_count} trees (density: {self.density:.2f})")
+        self.logger.info(f"Generating forest with {self.tree_count} trees (min distance: {self.min_distance:.2f})")
         
         # Generování pozic pro stromy
         positions = self._generate_tree_positions(self.tree_count)

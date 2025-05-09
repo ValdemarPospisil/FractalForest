@@ -10,9 +10,9 @@ import numpy as np
 # Importy z našich modulů
 from engine.renderer import Renderer 
 from engine.camera import Camera    
-from generation.tree import get_random_tree_type, get_tree_by_name, TREE_TYPES
-from generation.forest import ForestGenerator  # Nový import pro generování lesa
-from ui import UIManager  # Import UI manažera
+from generation.tree import get_random_tree_type, TREE_TYPES
+from generation.forest import ForestGenerator
+from ui import UIManager  
 
 
 
@@ -24,32 +24,31 @@ def setup_logging():
         level=logging.INFO,
         format='%(asctime)s -  %(levelname)s - %(message)s', 
         handlers=[
-            # logging.FileHandler("logs/app.log"), # Optional: log to file
+            # logging.FileHandler("logs/app.log"), 
             logging.StreamHandler()
         ]
     )
-    logging.getLogger('OpenGL').setLevel(logging.WARNING) # Quieten ModernGL/OpenGL noise if needed
+    logging.getLogger('OpenGL').setLevel(logging.WARNING) 
     logging.info("Logging system initialized")
 
 def main():
     setup_logging()
-    logger = logging.getLogger(__name__) # Use specific logger
+    logger = logging.getLogger(__name__)
 
     logger.info("Initializing application...")
     try:
         dpg.create_context()
         dpg.create_viewport(title='Procedural L-System Forest', width=1366, height=768)
-        renderer = Renderer(width=1366, height=768, title="Procedural L-System Forest") # Larger window
+        renderer = Renderer(width=1366, height=768, title="Procedural L-System Forest")
         camera = Camera(renderer.width, renderer.height)
 
-        # Nastavíme kameru trochu výš a dál, aby byla vidět i zem
-        camera.position = np.array([0.0, 1.0, 4.0]) # Vyšší a dále
+        camera.position = np.array([0.0, 1.0, 4.0])
         camera.update_view_matrix()
         logger.info("Renderer and Camera initialized.")
         logger.info(f"Camera positioned at {camera.position}, looking at {camera.target}")
         
         # Vytvoříme širokou zem (velikost 30x30)
-        renderer.create_ground(size=30.0, color=(0.6, 0.4, 0.2)) # Hnědá barva
+        renderer.create_ground(size=60.0, color=(0.267, 0.467, 0.2))
         logger.info("Ground plane created")
         
         # Inicializace UI manažera
@@ -57,9 +56,8 @@ def main():
         logger.info("UI Manager initialized")
     except Exception as e:
         logger.exception("Failed to initialize Renderer or Camera.")
-        return # Exit if core components fail
+        return
 
-    # Display available tree types
     available_trees = [tree_cls().name for tree_cls in TREE_TYPES]
     logger.info(f"Available tree types ({len(available_trees)}): {', '.join(available_trees)}")
     logger.info("Controls: ESC=Exit, SPACE=New Random Tree, 1-%d=Select Specific Tree, F=Generate Forest", len(TREE_TYPES))
@@ -70,7 +68,7 @@ def main():
     current_tree_def = None
     forest_generator = None
     forest_mode = False  # Nový příznak pro režim lesa
-    forest_density = 0.5  # Výchozí hustota lesa
+    min_distance = 0.5  # Výchozí hustota lesa
     forest_area_size = 20.0  # Výchozí velikost oblasti lesa
     tree_count = 45
 
@@ -136,7 +134,7 @@ def main():
         
         print("------------------------------------------------------------------------------------------------")
         print(" ")
-        logger.info(f"Generating forest with density {forest_density:.2f} in area size {forest_area_size:.1f}")
+        logger.info(f"Generating forest with min distance  {min_distance:.2f} in area size {forest_area_size:.1f}")
         
         try:
             # Vytvoříme generátor lesa, pokud ještě není
@@ -144,14 +142,13 @@ def main():
                 forest_generator = ForestGenerator(
                     renderer,
                     area_size=forest_area_size,
-                    density=forest_density,
+                    min_distance=min_distance,
                     tree_count=tree_count,
-                    min_distance=1.0
                 )
             else:
                 # Aktualizace parametrů
                 forest_generator.area_size = forest_area_size
-                forest_generator.density = forest_density
+                forest_generator.min_distance = min_distance 
                 forest_generator.tree_count = tree_count
             
             # Generování a vykreslení lesa
@@ -189,7 +186,7 @@ def main():
     angle_x = 0.0 # Start without tilt
     
     # Pro ovládání hustoty lesa a velikosti oblasti
-    forest_density_changing = False
+    min_distance_changing = False
     forest_area_changing = False
     tree_count_changing = False
     key_f_last_state = glfw.RELEASE
@@ -418,7 +415,7 @@ def main():
                      # Regenerate only if the type is different from the current one
                      if current_tree_def is None or selected_tree_def.name != current_tree_def.name:
                          regenerate_tree(selected_tree_def, renderer)
-                         # angle_y = 0.0 # Reset rotation on type change
+                         angle_y = 0.0 # Reset rotation on type change
                      break # Exit loop once a key is pressed
 
         # --- Nové ovládání pro generování lesa ---
@@ -430,26 +427,26 @@ def main():
         
         # Ovládání hustoty lesa
         if glfw.get_key(renderer.window, glfw.KEY_N) == glfw.PRESS:
-            forest_density = max(0.1, forest_density - 0.05)
-            forest_density_changing = True
-            logger.debug(f"Forest density decreased to {forest_density:.2f}")
+            min_distance = max(0.1, min_distance - 0.01)
+            min_distance_changing = True
+            logger.debug(f"Min distance between trees decreased to {min_distance:.2f}")
         elif glfw.get_key(renderer.window, glfw.KEY_M) == glfw.PRESS:
-            forest_density = min(3.0, forest_density + 0.05)
-            forest_density_changing = True
-            logger.debug(f"Forest density increased to {forest_density:.2f}")
-        elif forest_density_changing:
-            forest_density_changing = False
-            logger.info(f"Forest density set to {forest_density:.2f}")
+            min_distance = min(1.0, min_distance + 0.01)
+            min_distance_changing = True
+            logger.debug(f"Min distance between trees increased to {min_distance:.2f}")
+        elif min_distance_changing:
+            min_distance_changing = False
+            logger.info(f"Min distance between trees set to {min_distance:.2f}")
             if forest_mode:
                 generate_forest()
         
         # Ovládání velikosti oblasti lesa
         if glfw.get_key(renderer.window, glfw.KEY_K) == glfw.PRESS:
-            forest_area_size = max(5.0, forest_area_size - 1.0)
+            forest_area_size = max(5.0, forest_area_size - 0.5)
             forest_area_changing = True
             logger.debug(f"Forest area decreased to {forest_area_size:.1f}")
         elif glfw.get_key(renderer.window, glfw.KEY_L) == glfw.PRESS:
-            forest_area_size = min(80.0, forest_area_size + 1.0)
+            forest_area_size = min(60.0, forest_area_size + 0.5)
             forest_area_changing = True
             logger.debug(f"Forest area increased to {forest_area_size}")
         elif forest_area_changing:
@@ -460,11 +457,11 @@ def main():
 
         # Ovládání počtu stromů v lese      
         if glfw.get_key(renderer.window, glfw.KEY_O) == glfw.PRESS:
-            tree_count = max(15, tree_count - 1)
+            tree_count = max(5, tree_count - 1)
             tree_count_changing = True
             logger.debug(f"Forest tree count decreased to {tree_count}")
         elif glfw.get_key(renderer.window, glfw.KEY_P) == glfw.PRESS:
-            tree_count = min(100, tree_count + 1)
+            tree_count = min(200, tree_count + 1)
             tree_count_changing = True
             logger.debug(f"Forest tree count increased to {tree_count}")
         elif tree_count_changing:

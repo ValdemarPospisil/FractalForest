@@ -89,7 +89,7 @@ class TreeDefinition(ABC):
             leaf_color=self.leaf_color
         )
 
-        logging.info(f"Created {self.name} with angle={self.angle}°, base_length={initial_length:.3f}, initial_width={self.initial_width:.3f}, iterations={self.iterations}")
+        logging.info(f"Created {self.name} with angle={self.angle}°, base_length={initial_length:.3f}, iterations={self.iterations}")
         return lsystem
 
     def get_iterations(self) -> int:

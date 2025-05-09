@@ -91,7 +91,7 @@ class LSystem:
             logging.debug(f"Generation {i+1} complete, string length: {len(current)}")
 
         self.current_string = current
-        logging.info(f"L-system string generated with {iterations} iterations, final length: {len(self.current_string)}")
+        logging.info(f"L-system string generated, final length: {len(self.current_string)}")
 
         # Check for simplicity (e.g., straight line)
         if self._is_too_simple(self.current_string):
