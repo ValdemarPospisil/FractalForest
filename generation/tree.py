@@ -189,29 +189,40 @@ class SpiralCanopy(TreeDefinition):
     @property
     def initial_width(self) -> float: return 0.06  # Tlustší kmen
 
+
 class SakuraBlossom(TreeDefinition):
-    """Sakura strom s hustší korunou"""
+    """Vylepšený Sakura strom s charakteristickým tvarem a hustější korunou"""
     @property
     def name(self): return "Sakura Blossom"
     @property
     def rules(self): return {
-        "X": ["F[++X][--X][-X][+X]FX", "F[-X][+X][--X][++X]FX"],  # Více větví s různými úhly
-        "F": ["FF", "F[+F-X][-F+X]F[^FX][&FX]"] # Přidané větvení do více směrů
+        # Mnohem víc větvení s variabilitou do všech směrů
+        "X": [
+            "F[++X][--X][-X][+X][&&&X][^^^X]FX",
+            "F[+X][-X][\\X][/X][&X][^X]FX"
+        ],
+        # Výrazně složitější větvení pro typickou deštníkovitou korunu
+        "F": [
+            "FF",
+            "F[+F-X][-F+X]F", 
+            "F[^FX][&FX][/FX][\\FX]F"  # Přidané větvení do všech směrů
+        ]
     }
     @property
-    def angle(self): return 20.0  # Menší úhel pro hustší korunu
+    def angle(self): return 22.0  # Menší úhel pro hustší korunu
     @property
-    def base_length_ratio(self): return 0.28  # Kratší větve pro hustější vzhled
+    def base_length_ratio(self): return 0.25  # Kratší větve pro kompaktnější vzhled
     @property
     def trunk_color(self): return (0.45, 0.3, 0.25)
     @property
-    def leaf_color(self): return [(0.9, 0.7, 0.8), (1.0, 0.8, 0.9)] # Pinkish range
+    def leaf_color(self): return [(0.95, 0.75, 0.85), (1.0, 0.85, 0.95)]  # Světlejší růžová pro jarní květy
     @property
-    def iterations(self): return 4  # Méně iterací, ale hustší pravidla
+    def iterations(self): return 3  # Méně iterací při složitějších pravidlech
     @property
-    def scale(self): return 0.82  # Pomalejší zmenšování větví
+    def scale(self): return 0.8  # Pomalejší zmenšování větví pro lepší hustotu
     @property
     def initial_width(self) -> float: return 0.055
+
 
 class DenseConifer(TreeDefinition):
     """A dense conifer-like tree - upraveno pro lepší proporce"""
@@ -239,77 +250,106 @@ class DenseConifer(TreeDefinition):
 
 # ---- NOVÉ TYPY STROMŮ ----
 
+
 class OakTree(TreeDefinition):
-    """Klasický dub s širokou, rozložitou korunou"""
+    """Klasický dub s širokou, rozložitou korunou a hustším větvením"""
     @property
     def name(self): return "Oak Tree"
     @property
     def rules(self): return {
-        "X": ["F[+++X][---X][+X][-X]FX", "F[++X][--X]FX"],
-        "F": ["FF", "F[+F]F[-F]F"] 
+        # Výrazně více větvení v různých směrech pro typicky rozložitou korunu dubu
+        "X": [
+            "F[+++X][---X][+X][-X][&X][^X]FX", 
+            "F[++X][--X][&&&X][^^^X]FX"
+        ],
+        # Stohasticita ve větvích a více větvení
+        "F": [
+            "FF", 
+            "F[+F]F[-F]F",
+            "F[/F]F[\\F]F"  # Přidané kroucení kolem Z
+        ] 
     }
     @property
-    def angle(self): return 25.0
+    def angle(self): return 25.0  # Větší úhel pro širší korunu
     @property
-    def base_length_ratio(self): return 0.35
+    def base_length_ratio(self): return 0.32
     @property
-    def trunk_color(self): return (0.35, 0.2, 0.1)
+    def trunk_color(self): return (0.4, 0.25, 0.12)
     @property
-    def leaf_color(self): return [(0.2, 0.5, 0.1), (0.3, 0.6, 0.15)]
+    def leaf_color(self): return [(0.15, 0.55, 0.1), (0.35, 0.65, 0.2)]  # Tmavější zelené variace
     @property
-    def iterations(self): return 4
+    def iterations(self): return 4  # 4 iterace stačí při složitějších pravidlech
     @property
-    def scale(self): return 0.8
+    def scale(self): return 0.75  # Rychlejší zmenšování pro kompaktnější korunu
     @property
-    def initial_width(self) -> float: return 0.07  # Silný kmen
+    def initial_width(self) -> float: return 0.07  # Velmi silný kmen typický pro dub
+
 
 class PineTree(TreeDefinition):
-    """Borovice s charakteristickým tvarem"""
+    """Borovice s charakteristickým kónickým tvarem a hustším větvením"""
     @property
     def name(self): return "Pine Tree"
     @property
     def rules(self): return {
-        "X": "F[++FX][--FX][-FX][+FX]FX",
-        "F": "FF"
+        # Víc větvení směrem nahoru a do stran, také s různou hustotou
+        "X": [
+            "F[++X][--X][&X]F[+X][-X]FX",
+            "F[^FX][&FX][+FX][-FX]FX"
+        ],
+        # Stohasticita ve větvích
+        "F": ["FF", "F[+F]F[-F]", "F"]
     }
     @property
-    def angle(self): return 18.0
+    def angle(self): return 20.0  # Menší úhel pro hustší větvení
     @property
-    def base_length_ratio(self): return 0.4
+    def base_length_ratio(self): return 0.38
     @property
-    def trunk_color(self): return (0.3, 0.15, 0.05)
+    def trunk_color(self): return (0.35, 0.18, 0.08)
     @property
-    def leaf_color(self): return (0.0, 0.45, 0.05)
+    def leaf_color(self): return (0.0, 0.5, 0.15)  # Tmavší zelená pro jehličí
     @property
-    def iterations(self): return 4
+    def iterations(self): return 4  # 4 iterace jsou dostatečné pro hustotu
     @property
-    def scale(self): return 0.85
+    def scale(self): return 0.75  # Rychlejší zmenšování pro kónický tvar
     @property
-    def initial_width(self) -> float: return 0.055
+    def initial_width(self) -> float: return 0.06  # Silnější kmen
+
+
 
 class BirchTree(TreeDefinition):
-    """Bříza s tenčím kmenem a jemnými větvemi"""
+    """Vylepšená bříza s typickým štíhlým tvarem a jemnými větvemi"""
     @property
     def name(self): return "Birch Tree"
     @property
     def rules(self): return {
-        "X": "F[-X][+X][^X][&X]FX",
-        "F": ["FF", "F[-F][+F]F"]
+        # Více větvení do stran s důrazem na vzhůru typický pro břízu
+        "X": [
+            "F[-X][+X][^X][/X][\\X]FX",
+            "F[--X][++X][^X]F[-X][+X]FX"
+        ],
+        # Přidáno více jemného větvení
+        "F": [
+            "FF", 
+            "F[-F][+F]F",
+            "F[^F][&F]F",  # Větvení nahoru/dolů
+            "F[/F][\\F]F"  # Větvení s kroucením
+        ]
     }
     @property
-    def angle(self): return 27.0
+    def angle(self): return 20.0  # Menší úhel pro jemnější vzhled
     @property
-    def base_length_ratio(self): return 0.38
+    def base_length_ratio(self): return 0.4  # Delší větve pro štíhlý vzhled
     @property
-    def trunk_color(self): return (0.95, 0.95, 0.95)  # Téměř bílá
+    def trunk_color(self): return (0.9, 0.9, 0.85)  # Bříza má světlý kmen s jemným nádechem
     @property
-    def leaf_color(self): return [(0.4, 0.8, 0.1), (0.6, 0.9, 0.2)]
+    def leaf_color(self): return [(0.5, 0.85, 0.2), (0.7, 0.95, 0.3)]  # Světlejší svěží zelená
     @property
     def iterations(self): return 4
     @property
     def scale(self): return 0.8
     @property
-    def initial_width(self) -> float: return 0.04  # Tenčí kmen
+    def initial_width(self) -> float: return 0.04  # Tenčí kmen typický pro břízu
+
 
 class MapleTree(TreeDefinition):
     """Javor s charakteristickou širokou korunou"""
@@ -335,29 +375,40 @@ class MapleTree(TreeDefinition):
     @property
     def initial_width(self) -> float: return 0.06
 
+
 class WillowTree(TreeDefinition):
-    """Vrba s charakteristickými převislými větvemi"""
+    """Vylepšená vrba s typickými převislými větvemi"""
     @property
     def name(self): return "Willow Tree"
     @property
     def rules(self): return {
-        "X": "F[&&&X][\\\\X][//X][&X]FX",
-        "F": ["FF", "F[&F]F"]
+        # Více větvení s výrazným sklonem dolů (&&&) a kroucením
+        "X": [
+            "F[&&&X][&&&\\X][&&&/X][&X]FX",
+            "F[&&&+X][&&&-X][&X]FX"
+        ],
+        # Delší větve s převislým charakterem
+        "F": [
+            "FF", 
+            "F[&F]F[&F]F",  # Více převislých větví
+            "F[&\\F]F[&/F]F"  # S kroucením pro přirozený vzhled
+        ]
     }
     @property
-    def angle(self): return 28.0
+    def angle(self): return 20.0  # Menší úhel pro hustší převislé větvení
     @property
-    def base_length_ratio(self): return 0.35
+    def base_length_ratio(self): return 0.38
     @property
-    def trunk_color(self): return (0.3, 0.2, 0.1)
+    def trunk_color(self): return (0.35, 0.22, 0.1)
     @property
-    def leaf_color(self): return (0.6, 0.8, 0.2)
+    def leaf_color(self): return (0.5, 0.75, 0.3)  # Světlejší zelená typická pro vrbu
     @property
     def iterations(self): return 4
     @property
-    def scale(self): return 0.82
+    def scale(self): return 0.85  # Pomalejší zmenšování pro delší převislé větve
     @property
-    def initial_width(self) -> float: return 0.06
+    def initial_width(self) -> float: return 0.065  # Silnější kmen pro vyvážení převislých větví
+
 
 class DeadTree(TreeDefinition):
     """Uschlý strom bez listí"""
